@@ -1,0 +1,104 @@
+{
+  "mqtt": {
+    "connection": {
+      "host": "p021f2cb.ala.asia-southeast1.emqxsl.com",
+      "port": 8883,
+      "protocol": "mqtts",
+      "reconnectPeriod": 5000,
+      "connectTimeout": 30000,
+      "keepalive": 60,
+      "clean": true,
+      "rejectUnauthorized": true
+    },
+    "topics": {
+      "ros2_topic_list": {
+        "name": "ros2_topic_list",
+        "qos": 1,
+        "retain": true,
+        "description": "ROS2 토픽 목록"
+      },
+      "weight_sensor": {
+        "name": "topic",
+        "qos": 0,
+        "retain": false,
+        "description": "아두이노 무게센서 데이터"
+      },
+      "target_concentration": {
+        "name": "web/target_concentration",
+        "qos": 1,
+        "retain": true,
+        "description": "웹에서 설정하는 목표 농도"
+      },
+      "robot_control": {
+        "name": "robot/control/+",
+        "qos": 2,
+        "retain": false,
+        "description": "로봇 제어 명령"
+      },
+      "system_health": {
+        "name": "system/health",
+        "qos": 0,
+        "retain": true,
+        "description": "시스템 상태 하트비트"
+      }
+    },
+    "security": {
+      "enable_tls": true,
+      "tls_version": "TLSv1.2",
+      "verify_certificate": true
+    }
+  },
+  "websocket": {
+    "port": 8080,
+    "ping_interval": 30000,
+    "pong_timeout": 5000,
+    "max_clients": 100,
+    "compression": false
+  },
+  "data_processing": {
+    "buffer_size": 2000,
+    "retention_hours": 48,
+    "weight_sensor": {
+      "min_value": -1.0,
+      "max_value": 100.0,
+      "noise_threshold": 0.01,
+      "decimal_places": 2
+    },
+    "concentration": {
+      "min_value": 0,
+      "max_value": 100,
+      "default_target": 75.0,
+      "decimal_places": 1
+    },
+    "robot_limits": {
+      "joint_count": 6,
+      "joint_limits": [
+        {"min": -360, "max": 360},
+        {"min": -360, "max": 360},
+        {"min": -158, "max": 158},
+        {"min": -360, "max": 360},
+        {"min": -360, "max": 360},
+        {"min": -360, "max": 360}
+      ],
+      "workspace": {
+        "x": {"min": -1000, "max": 1000},
+        "y": {"min": -1000, "max": 1000},
+        "z": {"min": 0, "max": 1000}
+      }
+    }
+  },
+  "logging": {
+    "level": "info",
+    "file": "../data/logs/mqtt/processor.log",
+    "max_file_size": "10MB",
+    "max_files": 5,
+    "console_output": true,
+    "timestamp_format": "YYYY-MM-DD HH:mm:ss"
+  },
+  "performance": {
+    "health_check_interval": 60000,
+    "memory_warning_threshold": 500,
+    "cpu_warning_threshold": 80,
+    "enable_monitoring": true
+  }
+}

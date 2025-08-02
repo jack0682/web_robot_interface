@@ -1,0 +1,136 @@
+{
+  "topics": {
+    "ros2": {
+      "topic_list": "ros2_topic_list",
+      "node_list": "ros2_node_list",
+      "service_list": "ros2_service_list",
+      "parameter_events": "ros2/parameter_events",
+      "joint_states": "ros2/dsr01/joint_states",
+      "robot_description": "ros2/dsr01/robot_description",
+      "dynamic_joint_states": "ros2/dsr01/dynamic_joint_states",
+      "error": "ros2/dsr01/error",
+      "robot_disconnection": "ros2/dsr01/robot_disconnection"
+    },
+    "sensors": {
+      "weight_arduino": "topic",
+      "weight_processed": "sensors/weight/processed",
+      "concentration_current": "sensors/concentration/current",
+      "concentration_target": "sensors/concentration/target",
+      "temperature": "sensors/temperature",
+      "pressure": "sensors/pressure",
+      "all": "sensors/+"
+    },
+    "robot": {
+      "status": "robot/status",
+      "control_commands": "robot/control/+",
+      "move_joint": "robot/control/move_joint",
+      "move_linear": "robot/control/move_linear",
+      "stop": "robot/control/stop",
+      "emergency_stop": "robot/control/emergency_stop",
+      "home": "robot/control/home",
+      "mode_change": "robot/mode",
+      "errors": "robot/errors",
+      "response": "robot/response"
+    },
+    "web_dashboard": {
+      "target_concentration": "web/target_concentration",
+      "user_commands": "web/commands",
+      "settings": "web/settings",
+      "user_events": "web/user_events",
+      "ui_state": "web/ui_state"
+    },
+    "system": {
+      "health": "system/health",
+      "heartbeat": "system/heartbeat",
+      "logs": "system/logs/+",
+      "diagnostics": "system/diagnostics",
+      "performance": "system/performance",
+      "concentration_command": "system/concentration/command",
+      "concentration_response": "system/concentration/response"
+    },
+    "control": {
+      "servo_streams": [
+        "ros2/dsr01/servoj_stream",
+        "ros2/dsr01/servoj_rt_stream",
+        "ros2/dsr01/servol_stream", 
+        "ros2/dsr01/servol_rt_stream"
+      ],
+      "speed_streams": [
+        "ros2/dsr01/speedj_stream",
+        "ros2/dsr01/speedj_rt_stream",
+        "ros2/dsr01/speedl_stream",
+        "ros2/dsr01/speedl_rt_stream"
+      ],
+      "torque_streams": [
+        "ros2/dsr01/torque_rt_stream"
+      ],
+      "motion_streams": [
+        "ros2/dsr01/alter_motion_stream"
+      ]
+    },
+    "navigation": {
+      "clicked_point": "ros2/clicked_point",
+      "initial_pose": "ros2/initialpose",
+      "move_base_goal": "ros2/move_base_simple/goal",
+      "tf": "ros2/tf",
+      "tf_static": "ros2/tf_static"
+    }
+  },
+  "qos_levels": {
+    "robot_control": 2,
+    "emergency_stop": 2,
+    "target_concentration": 1,
+    "robot_status": 1,
+    "sensor_data": 0,
+    "system_logs": 1,
+    "heartbeat": 0,
+    "ros2_topics": 1,
+    "default": 0
+  },
+  "retain_flags": {
+    "robot_status": true,
+    "target_concentration": true,
+    "sensor_calibration": true,
+    "system_config": true,
+    "ros2_topic_list": true,
+    "will_message": true,
+    "default": false
+  },
+  "subscription_patterns": {
+    "all_robot": "robot/+",
+    "all_sensors": "sensors/+", 
+    "all_system": "system/+",
+    "all_web": "web/+",
+    "all_ros2": "ros2/+",
+    "all_control": "robot/control/+",
+    "all_logs": "system/logs/+"
+  },
+  "topic_filters": {
+    "high_priority": [
+      "robot/control/emergency_stop",
+      "robot/errors",
+      "ros2/dsr01/error",
+      "ros2/dsr01/robot_disconnection"
+    ],
+    "medium_priority": [
+      "robot/control/+",
+      "web/target_concentration",
+      "robot/status",
+      "ros2_topic_list"
+    ],
+    "low_priority": [
+      "sensors/+",
+      "system/heartbeat",
+      "system/performance"
+    ]
+  },
+  "data_types": {
+    "ros2_topic_list": "array",
+    "weight_sensor": "number",
+    "target_concentration": "number",
+    "robot_status": "object",
+    "joint_states": "object",
+    "control_commands": "object",
+    "system_health": "object"
+  }
+}

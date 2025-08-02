@@ -1,0 +1,94 @@
+{
+  "name": "robot-web-dashboard",
+  "version": "1.0.0",
+  "description": "Doosan M0609 Robot Web Dashboard - Complete monitoring and control system",
+  "main": "index.js",
+  "private": true,
+  "workspaces": [
+    "frontend",
+    "backend", 
+    "mqtt_processor"
+  ],
+  "scripts": {
+    "setup": "chmod +x scripts/setup.sh && ./scripts/setup.sh",
+    "start": "./scripts/start_services.sh",
+    "stop": "./scripts/stop_services.sh",
+    "restart": "./scripts/restart_services.sh",
+    "health": "./scripts/health_check.sh",
+    "logs": "tail -f data/logs/system/*.log",
+    "install:all": "npm install && npm run install:frontend && npm run install:backend && npm run install:mqtt",
+    "install:frontend": "cd frontend && npm install",
+    "install:backend": "cd backend && npm install", 
+    "install:mqtt": "cd mqtt_processor && npm install",
+    "build:all": "npm run build:frontend && npm run build:backend",
+    "build:frontend": "cd frontend && npm run build",
+    "build:backend": "cd backend && npm run build",
+    "dev:frontend": "cd frontend && npm start",
+    "dev:backend": "cd backend && npm run dev",
+    "dev:mqtt": "cd mqtt_processor && npm run dev",
+    "test:all": "npm run test:frontend && npm run test:backend && npm run test:mqtt",
+    "test:frontend": "cd frontend && npm test",
+    "test:backend": "cd backend && npm test",
+    "test:mqtt": "cd mqtt_processor && npm test",
+    "lint:all": "npm run lint:frontend && npm run lint:backend && npm run lint:mqtt",
+    "lint:frontend": "cd frontend && npm run lint",
+    "lint:backend": "cd backend && npm run lint", 
+    "lint:mqtt": "cd mqtt_processor && npm run lint",
+    "docker:build": "docker-compose build",
+    "docker:up": "docker-compose up -d",
+    "docker:down": "docker-compose down",
+    "docker:logs": "docker-compose logs -f",
+    "backup": "./scripts/backup_data.sh",
+    "deploy": "./scripts/deploy.sh",
+    "monitor": "./scripts/monitor_system.sh"
+  },
+  "keywords": [
+    "robot",
+    "dashboard", 
+    "doosan",
+    "m0609",
+    "mqtt",
+    "ros2",
+    "react",
+    "nodejs",
+    "websocket",
+    "real-time",
+    "monitoring",
+    "control"
+  ],
+  "author": "Robot Dashboard Team",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-username/robot-web-dashboard.git"
+  },
+  "bugs": {
+    "url": "https://github.com/your-username/robot-web-dashboard/issues"
+  },
+  "homepage": "https://github.com/your-username/robot-web-dashboard#readme",
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
+  },
+  "devDependencies": {
+    "concurrently": "^7.6.0",
+    "cross-env": "^7.0.3",
+    "husky": "^8.0.3",
+    "lint-staged": "^13.1.2",
+    "prettier": "^2.8.4"
+  },
+  "husky": {
+    "hooks": {
+      "pre-commit": "lint-staged"
+    }
+  },
+  "lint-staged": {
+    "*.{js,jsx,ts,tsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,css,md}": [
+      "prettier --write"
+    ]
+  }
+}

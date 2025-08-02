@@ -1,0 +1,55 @@
+{
+  "robot_model": "M0609",
+  "manufacturer": "Doosan Robotics",
+  "specifications": {
+    "dof": 6,
+    "max_payload": 6.0,
+    "max_reach": 900,
+    "weight": 33.0,
+    "repeatability": 0.1,
+    "joint_limits": {
+      "joint_1": [-360, 360],
+      "joint_2": [-360, 360], 
+      "joint_3": [-158, 158],
+      "joint_4": [-360, 360],
+      "joint_5": [-360, 360],
+      "joint_6": [-360, 360]
+    },
+    "joint_max_velocities": {
+      "joint_1": 250,
+      "joint_2": 250,
+      "joint_3": 250,
+      "joint_4": 300,
+      "joint_5": 300,
+      "joint_6": 300
+    },
+    "tcp_max_velocity": {
+      "linear": 1000,
+      "angular": 360
+    }
+  },
+  "coordinate_systems": {
+    "base": {
+      "name": "base_link",
+      "origin": [0, 0, 0, 0, 0, 0]
+    },
+    "tool": {
+      "name": "tool0",
+      "offset": [0, 0, 0, 0, 0, 0]
+    },
+    "work": {
+      "name": "workpiece",
+      "offset": [0, 0, 0, 0, 0, 0]
+    }
+  },
+  "safety_parameters": {
+    "joint_position_limits": true,
+    "joint_velocity_limits": true,
+    "tcp_velocity_limits": true,
+    "collision_detection": true,
+    "force_limits": {
+      "max_force": 150,
+      "max_torque": 30
+    }
+  }
+}

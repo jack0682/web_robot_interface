@@ -1,0 +1,60 @@
+{
+  "weight_sensor": {
+    "model": "HX711_LoadCell",
+    "capacity": 50,
+    "unit": "kg",
+    "precision": 0.01,
+    "calibration": {
+      "offset": 0,
+      "scale": 2280,
+      "reference_weight": 1.0
+    },
+    "sampling_rate": 10,
+    "filter": {
+      "enabled": true,
+      "type": "moving_average",
+      "window_size": 5
+    },
+    "thresholds": {
+      "min": 0,
+      "max": 45,
+      "warning_low": 5,
+      "warning_high": 40
+    }
+  },
+  "concentration_sensor": {
+    "model": "Custom_Concentration",
+    "range": [0, 100],
+    "unit": "%",
+    "precision": 0.1,
+    "calibration": {
+      "zero_point": 0,
+      "span_point": 100,
+      "slope": 1.0,
+      "intercept": 0.0
+    },
+    "sampling_rate": 5,
+    "filter": {
+      "enabled": true,
+      "type": "exponential_smoothing",
+      "alpha": 0.3
+    },
+    "thresholds": {
+      "target": 75.0,
+      "tolerance": 5.0,
+      "alarm_deviation": 10.0
+    }
+  },
+  "temperature_sensor": {
+    "model": "DS18B20",
+    "range": [-55, 125],
+    "unit": "°C",
+    "precision": 0.0625,
+    "sampling_rate": 1,
+    "thresholds": {
+      "min": 0,
+      "max": 60,
+      "warning_high": 50
+    }
+  }
+}
