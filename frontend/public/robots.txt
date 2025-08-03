@@ -1,0 +1,6 @@
+# https://www.robotstxt.org/robotstxt.html
+User-agent: *
+Disallow: /
+
+# 로봇 대시보드는 내부 시스템이므로 검색엔진 크롤링 차단
+# Robot dashboard is internal system, blocking search engine crawling

@@ -8,9 +8,9 @@ import {
   User,
   Power
 } from 'lucide-react';
-import { useMqttConnection } from '@/hooks/useMqttConnection';
-import { useNotifications } from '@/hooks/useNotifications';
-import ConnectionIndicator from '@/components/visualization/indicators/ConnectionIndicator';
+import { useMqttConnection } from '../../hooks/useMqttConnection';
+import { useNotifications } from '../../hooks/useNotifications';
+import ConnectionIndicator from '../visualization/indicators/ConnectionIndicator';
 
 interface HeaderProps {
   onMenuClick: () => void;

@@ -1,0 +1,16 @@
+import React from 'react';
+
+interface Props {
+  onChange?: () => void;
+}
+
+const RobotSettings: React.FC<Props> = ({ onChange }) => {
+  return (
+    <div className="p-4">
+      <h3 className="text-lg font-semibold mb-4">RobotSettings</h3>
+      <p>RobotSettings 컴포넌트 (구현 예정)</p>
+    </div>
+  );
+};
+
+export default RobotSettings;

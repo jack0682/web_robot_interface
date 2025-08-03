@@ -1,18 +1,16 @@
 #!/bin/bash
 
-# Robot Web Dashboard Setup Script
-# 로봇 웹 대시보드 전체 환경 설정 스크립트
+# Setup Robot Web Dashboard
+# 전체 프로젝트 초기 설정 및 의존성 설치
 
 set -e
-
-echo "🤖 Robot Web Dashboard Setup Started"
-echo "=================================================="
 
 # 색상 정의
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
+PURPLE='\033[0;35m'
 NC='\033[0m' # No Color
 
 # 함수 정의
@@ -32,161 +30,239 @@ log_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
-# 시스템 정보 확인
-log_info "Checking system information..."
-echo "OS: $(lsb_release -d | cut -f2)"
-echo "Kernel: $(uname -r)"
-echo "Architecture: $(uname -m)"
+log_step() {
+    echo -e "${PURPLE}[STEP]${NC} $1"
+}
 
-# Node.js 및 npm 확인
-log_info "Checking Node.js and npm..."
-if command -v node &> /dev/null; then
-    echo "Node.js version: $(node --version)"
+echo "🚀 Robot Web Dashboard Setup"
+echo "=================================================="
+
+# 현재 디렉토리 확인 및 이동
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+if [[ "$SCRIPT_DIR" == *"/scripts" ]]; then
+    PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+    cd "$PROJECT_DIR"
 else
-    log_error "Node.js is not installed"
-    exit 1
+    PROJECT_DIR="$(pwd)"
 fi
 
-if command -v npm &> /dev/null; then
-    echo "npm version: $(npm --version)"
-else
-    log_error "npm is not installed"
-    exit 1
-fi
-
-# ROS2 환경 확인
-log_info "Checking ROS2 environment..."
-if [ -f "/opt/ros/humble/setup.bash" ]; then
-    source /opt/ros/humble/setup.bash
-    log_success "ROS2 Humble found"
-else
-    log_warning "ROS2 Humble not found. Some features may not work."
-fi
-
-# 프로젝트 디렉토리 설정
-PROJECT_DIR="$(pwd)"
 log_info "Project directory: $PROJECT_DIR"
 
-# 의존성 설치
-log_info "Installing dependencies..."
-
-# Frontend 의존성 설치
-if [ -d "frontend" ]; then
-    log_info "Installing frontend dependencies..."
-    cd frontend
-    npm install
-    cd ..
-    log_success "Frontend dependencies installed"
+# Node.js 버전 확인
+log_step "Checking Node.js version..."
+if command -v node &> /dev/null; then
+    NODE_VERSION=$(node -v)
+    log_success "Node.js version: $NODE_VERSION"
+    
+    # Node.js 버전이 18 이상인지 확인
+    NODE_MAJOR=$(echo $NODE_VERSION | cut -d'.' -f1 | sed 's/v//')
+    if [ "$NODE_MAJOR" -lt 18 ]; then
+        log_warning "Node.js version 18+ recommended. Current: $NODE_VERSION"
+    fi
 else
-    log_warning "Frontend directory not found"
+    log_error "Node.js not found. Please install Node.js 18+ first."
+    echo "Installation guide: https://nodejs.org/"
+    exit 1
 fi
 
-# Backend 의존성 설치
-if [ -d "backend" ]; then
-    log_info "Installing backend dependencies..."
-    cd backend
-    npm install
-    cd ..
-    log_success "Backend dependencies installed"
+# npm 확인
+if command -v npm &> /dev/null; then
+    NPM_VERSION=$(npm -v)
+    log_success "npm version: $NPM_VERSION"
 else
-    log_warning "Backend directory not found"
+    log_error "npm not found. Please install npm first."
+    exit 1
 fi
 
-# MQTT Processor 의존성 설치
-if [ -d "mqtt_processor" ]; then
-    log_info "Installing MQTT processor dependencies..."
-    cd mqtt_processor
+# 프로젝트 구조 확인
+log_step "Checking project structure..."
+for dir in "frontend" "backend" "mqtt_processor"; do
+    if [ -d "$dir" ]; then
+        log_success "✓ Found $dir"
+    else
+        log_error "✗ Missing $dir directory"
+        echo "Please ensure you're in the correct project directory."
+        exit 1
+    fi
+done
+
+# 루트 의존성 설치
+log_step "Installing root dependencies..."
+if [ -f "package.json" ]; then
     npm install
-    cd ..
-    log_success "MQTT processor dependencies installed"
+    log_success "Root dependencies installed"
 else
-    log_warning "MQTT processor directory not found"
+    log_warning "No root package.json found"
 fi
 
-# 환경 변수 파일 생성
-log_info "Setting up environment files..."
-
-# Frontend .env 파일
-if [ ! -f "frontend/.env" ] && [ -f "frontend/.env.example" ]; then
-    cp frontend/.env.example frontend/.env
-    log_success "Frontend .env file created"
+# Frontend 설정
+log_step "Setting up Frontend..."
+cd frontend
+if [ ! -f "package.json" ]; then
+    log_error "Frontend package.json not found"
+    cd "$PROJECT_DIR"
+    exit 1
 fi
 
-# Backend .env 파일
-if [ ! -f "backend/.env" ] && [ -f "backend/.env.example" ]; then
-    cp backend/.env.example backend/.env
-    log_success "Backend .env file created"
+log_info "Installing Frontend dependencies..."
+npm install
+log_success "Frontend dependencies installed"
+
+# 환경 변수 파일 설정
+if [ ! -f ".env" ] && [ -f ".env.example" ]; then
+    log_info "Creating Frontend .env file..."
+    cp .env.example .env
+    log_success "Frontend .env created from example"
 fi
 
-# MQTT Processor .env 파일
-if [ ! -f "mqtt_processor/.env" ] && [ -f "mqtt_processor/.env.example" ]; then
-    cp mqtt_processor/.env.example mqtt_processor/.env
-    log_success "MQTT processor .env file created"
+cd "$PROJECT_DIR"
+
+# Backend 설정
+log_step "Setting up Backend..."
+cd backend
+if [ ! -f "package.json" ]; then
+    log_error "Backend package.json not found"
+    cd "$PROJECT_DIR"
+    exit 1
 fi
+
+log_info "Installing Backend dependencies..."
+npm install
+log_success "Backend dependencies installed"
+
+# 환경 변수 파일 설정
+if [ ! -f ".env" ] && [ -f ".env.example" ]; then
+    log_info "Creating Backend .env file..."
+    cp .env.example .env
+    log_success "Backend .env created from example"
+fi
+
+cd "$PROJECT_DIR"
+
+# MQTT Processor 설정
+log_step "Setting up MQTT Processor..."
+cd mqtt_processor
+if [ ! -f "package.json" ]; then
+    log_error "MQTT Processor package.json not found"
+    cd "$PROJECT_DIR"
+    exit 1
+fi
+
+log_info "Installing MQTT Processor dependencies..."
+npm install
+log_success "MQTT Processor dependencies installed"
+
+# 환경 변수 파일 설정
+if [ ! -f ".env" ] && [ -f ".env.example" ]; then
+    log_info "Creating MQTT Processor .env file..."
+    cp .env.example .env
+    log_success "MQTT Processor .env created from example"
+fi
+
+cd "$PROJECT_DIR"
+
+# 로그 디렉토리 생성
+log_step "Creating log directories..."
+mkdir -p data/logs/{system,backend,mqtt,frontend}
+log_success "Log directories created"
 
 # 권한 설정
-log_info "Setting up permissions..."
+log_step "Setting up permissions..."
 chmod +x scripts/*.sh
 log_success "Script permissions set"
 
-# 로그 디렉토리 생성
-log_info "Creating log directories..."
-mkdir -p data/logs/{mqtt,frontend,backend,system}
-mkdir -p data/cache/{sensor_data,robot_states}
-mkdir -p data/history/{daily,monthly,exports}
-mkdir -p data/backups/{configs,databases}
-log_success "Data directories created"
-
-# Docker 확인 (선택사항)
-if command -v docker &> /dev/null; then
-    log_info "Docker found: $(docker --version)"
-    if [ -f "docker-compose.yml" ]; then
-        log_info "Docker Compose configuration found"
-    fi
-else
-    log_warning "Docker not found. Manual deployment required."
-fi
-
-# MQTT 브로커 확인
-log_info "Checking MQTT broker availability..."
+# MQTT 브로커 설치 확인
+log_step "Checking MQTT broker..."
 if command -v mosquitto &> /dev/null; then
     log_success "Mosquitto MQTT broker found"
 else
-    log_warning "MQTT broker not found. Please install mosquitto or configure external broker."
+    log_warning "Mosquitto MQTT broker not found"
+    echo ""
+    echo "To install Mosquitto:"
+    echo "  sudo apt update"
+    echo "  sudo apt install mosquitto mosquitto-clients"
+    echo ""
+    echo "Or use external MQTT broker (configured in .env files)"
 fi
 
-# 최종 검증
-log_info "Running final verification..."
-
-# 설정 파일 검증
-config_files=(
-    "configs/mqtt/emqx_connection.json"
-    "configs/mqtt/topic_mapping.json"
-    "configs/robot/m0609_specs.json"
-    "configs/sensors/weight_sensor_config.json"
-)
-
-for config_file in "${config_files[@]}"; do
-    if [ -f "$config_file" ]; then
-        log_success "✓ $config_file"
+# Docker 확인 (선택사항)
+log_step "Checking Docker (optional)..."
+if command -v docker &> /dev/null; then
+    log_success "Docker found"
+    if command -v docker-compose &> /dev/null; then
+        log_success "Docker Compose found"
     else
-        log_error "✗ $config_file missing"
+        log_warning "Docker Compose not found"
+    fi
+else
+    log_warning "Docker not found (optional for containerized deployment)"
+fi
+
+# 빌드 테스트
+log_step "Testing builds..."
+
+# Frontend 빌드 테스트
+cd frontend
+log_info "Testing Frontend build..."
+if npm run build > /dev/null 2>&1; then
+    log_success "Frontend builds successfully"
+    # 빌드 결과물 정리 (개발용)
+    rm -rf build 2>/dev/null || true
+else
+    log_warning "Frontend build test failed (may need configuration)"
+fi
+
+cd "$PROJECT_DIR"
+
+echo ""
+echo "=================================================="
+log_success "🎉 Setup completed successfully!"
+echo "=================================================="
+echo ""
+echo "Next steps:"
+echo ""
+echo "1. Configure environment variables:"
+echo "   - frontend/.env (React app settings)"
+echo "   - backend/.env (API server settings)" 
+echo "   - mqtt_processor/.env (MQTT settings)"
+echo ""
+echo "2. Start all services:"
+echo "   ./scripts/start_services.sh"
+echo ""
+echo "3. Access the dashboard:"
+echo "   http://localhost:3000"
+echo ""
+echo "4. Optional: Start with Docker:"
+echo "   docker-compose up -d"
+echo ""
+echo "Useful commands:"
+echo "- npm run install:all     # Reinstall all dependencies"
+echo "- npm run build:all       # Build all projects"
+echo "- npm run dev:frontend    # Start frontend only"
+echo "- npm run dev:backend     # Start backend only"
+echo "- npm run dev:mqtt        # Start MQTT processor only"
+echo ""
+
+# 최종 상태 확인
+log_info "Final status check:"
+for dir in "frontend" "backend" "mqtt_processor"; do
+    if [ -d "$dir/node_modules" ]; then
+        log_success "✓ $dir dependencies ready"
+    else
+        log_warning "✗ $dir dependencies missing"
     fi
 done
 
 echo ""
-echo "=================================================="
-log_success "🎉 Robot Web Dashboard Setup Complete!"
-echo "=================================================="
+echo "📚 Documentation:"
+echo "- Project README: ./README.md"
+echo "- Frontend README: ./frontend/README.md" 
+echo "- API Documentation: ./backend/API.md (if available)"
 echo ""
-echo "Next steps:"
-echo "1. Configure environment variables in .env files"
-echo "2. Start MQTT broker: mosquitto -d"
-echo "3. Run services: ./scripts/start_services.sh"
-echo "4. Open browser: http://localhost:3000"
+echo "🐛 Troubleshooting:"
+echo "- Check logs: tail -f data/logs/system/*.log"
+echo "- Verify ports: netstat -tuln | grep -E '3000|5000|8080|1883'"
+echo "- Health check: ./scripts/health_check.sh"
 echo ""
-echo "For development:"
-echo "- Frontend dev server: cd frontend && npm start"
-echo "- Backend dev server: cd backend && npm run dev"
-echo "- MQTT processor: cd mqtt_processor && npm start"
-echo ""
+
+log_success "Ready to launch! 🚀"

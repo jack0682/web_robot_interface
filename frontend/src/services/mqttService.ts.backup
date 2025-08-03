@@ -1,0 +1,357 @@
+/**
+ * MQTT WebSocket 서비스
+ * 백엔드 MQTT Processor (포트 8080)와 실시간 통신
+ */
+import { 
+  MqttMessage, 
+  WebSocketMessage, 
+  TopicMessage, 
+  MessageHandler,
+  WebSocketConfig 
+} from '../types/mqttTypes';
+
+class MqttWebSocketService {
+  private ws: WebSocket | null = null;
+  private config: WebSocketConfig;
+  private messageHandlers: Map<string, MessageHandler[]> = new Map();
+  private subscriptions: Set<string> = new Set();
+  private reconnectAttempts = 0;
+  private reconnectTimeout: NodeJS.Timeout | null = null;
+  private isConnected = false;
+  private connectionListeners: ((connected: boolean) => void)[] = [];
+  private messageQueue: any[] = [];
+
+  constructor(config: WebSocketConfig) {
+    this.config = config;
+    this.connect();
+  }
+
+  /**
+   * WebSocket 연결 설정
+   */
+  private connect() {
+    try {
+      if (this.ws) {
+        this.ws.close();
+      }
+
+      console.log('🔌 Connecting to MQTT WebSocket:', this.config.url);
+      this.ws = new WebSocket(this.config.url);
+      
+      this.ws.onopen = this.handleOpen.bind(this);
+      this.ws.onmessage = this.handleMessage.bind(this);
+      this.ws.onerror = this.handleError.bind(this);
+      this.ws.onclose = this.handleClose.bind(this);
+      
+    } catch (error) {
+      console.error('❌ WebSocket connection failed:', error);
+      this.scheduleReconnect();
+    }
+  }
+
+  /**
+   * 연결 성공 핸들러
+   */
+  private handleOpen() {
+    console.log('✅ MQTT WebSocket connected');
+    this.isConnected = true;
+    this.reconnectAttempts = 0;
+    
+    // 연결 리스너 알림
+    this.connectionListeners.forEach(listener => listener(true));
+    
+    // 연결 확인 메시지
+    this.sendMessage({
+      type: 'connection',
+      clientId: `dashboard_${Date.now()}`,
+      timestamp: new Date().toISOString()
+    });
+
+    // 기존 구독 복원
+    this.subscriptions.forEach(topic => {
+      this.sendMessage({
+        type: 'subscribe',
+        topic: topic
+      });
+    });
+
+    // 대기 중인 메시지 전송
+    while (this.messageQueue.length > 0) {
+      const message = this.messageQueue.shift();
+      this.sendMessage(message);
+    }
+  }
+
+  /**
+   * 메시지 수신 핸들러
+   */
+  private handleMessage(event: MessageEvent) {
+    try {
+      const message: WebSocketMessage = JSON.parse(event.data);
+      
+      console.log('📨 MQTT message received:', {
+        type: message.type,
+        topic: message.topic,
+        timestamp: message.timestamp
+      });
+
+      // 타입별 핸들러 실행
+      const handlers = this.messageHandlers.get(message.type) || [];
+      handlers.forEach(handler => {
+        try {
+          handler(message);
+        } catch (error) {
+          console.error(`❌ Error in message handler for ${message.type}:`, error);
+        }
+      });
+
+      // 토픽별 핸들러 실행
+      if (message.topic) {
+        const topicHandlers = this.messageHandlers.get(message.topic) || [];
+        topicHandlers.forEach(handler => {
+          try {
+            handler(message);
+          } catch (error) {
+            console.error(`❌ Error in topic handler for ${message.topic}:`, error);
+          }
+        });
+
+        // 와일드카드 토픽 처리 (robot/control/+)
+        this.handleWildcardTopics(message);
+      }
+
+      // 전체 메시지 핸들러 실행
+      const allHandlers = this.messageHandlers.get('*') || [];
+      allHandlers.forEach(handler => {
+        try {
+          handler(message);
+        } catch (error) {
+          console.error('❌ Error in universal message handler:', error);
+        }
+      });
+
+    } catch (error) {
+      console.error('❌ Failed to parse WebSocket message:', error);
+    }
+  }
+
+  /**
+   * 와일드카드 토픽 처리
+   */
+  private handleWildcardTopics(message: WebSocketMessage) {
+    if (!message.topic) return;
+
+    // robot/control/+ 패턴 매칭
+    if (message.topic.startsWith('robot/control/')) {
+      const wildcardHandlers = this.messageHandlers.get('robot/control/+') || [];
+      wildcardHandlers.forEach(handler => handler(message));
+    }
+
+    // sensors/+ 패턴 매칭
+    if (message.topic.startsWith('sensors/')) {
+      const wildcardHandlers = this.messageHandlers.get('sensors/+') || [];
+      wildcardHandlers.forEach(handler => handler(message));
+    }
+  }
+
+  /**
+   * 에러 핸들러
+   */
+  private handleError(error: Event) {
+    console.error('🚨 MQTT WebSocket error:', error);
+    this.isConnected = false;
+    this.connectionListeners.forEach(listener => listener(false));
+  }
+
+  /**
+   * 연결 종료 핸들러
+   */
+  private handleClose(event: CloseEvent) {
+    console.log('🔌 MQTT WebSocket disconnected:', event.code, event.reason);
+    this.isConnected = false;
+    this.connectionListeners.forEach(listener => listener(false));
+    
+    // 예상되지 않은 종료인 경우 재연결
+    if (event.code !== 1000) {
+      this.scheduleReconnect();
+    }
+  }
+
+  /**
+   * 재연결 스케줄링
+   */
+  private scheduleReconnect() {
+    if (this.reconnectTimeout) {
+      clearTimeout(this.reconnectTimeout);
+    }
+
+    if (this.reconnectAttempts < this.config.maxReconnectAttempts) {
+      const delay = Math.min(
+        this.config.reconnectInterval * Math.pow(2, this.reconnectAttempts),
+        30000
+      );
+      
+      console.log(`🔄 Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts + 1})`);
+      
+      this.reconnectTimeout = setTimeout(() => {
+        this.reconnectAttempts++;
+        this.connect();
+      }, delay);
+    } else {
+      console.error('🚨 Max reconnection attempts reached');
+    }
+  }
+
+  /**
+   * 메시지 전송
+   */
+  public sendMessage(message: any): boolean {
+    const messageWithTimestamp = {
+      ...message,
+      timestamp: new Date().toISOString()
+    };
+
+    if (this.isConnected && this.ws && this.ws.readyState === WebSocket.OPEN) {
+      try {
+        this.ws.send(JSON.stringify(messageWithTimestamp));
+        return true;
+      } catch (error) {
+        console.error('❌ Failed to send message:', error);
+        return false;
+      }
+    } else {
+      // 연결되지 않은 경우 큐에 저장
+      this.messageQueue.push(messageWithTimestamp);
+      console.warn('⚠️ Message queued (not connected):', message.type);
+      return false;
+    }
+  }
+
+  /**
+   * 토픽 구독
+   */
+  public subscribe(topic: string): void {
+    this.subscriptions.add(topic);
+    
+    this.sendMessage({
+      type: 'subscribe',
+      topic: topic
+    });
+    
+    console.log('📡 Subscribed to topic:', topic);
+  }
+
+  /**
+   * 토픽 구독 해제
+   */
+  public unsubscribe(topic: string): void {
+    this.subscriptions.delete(topic);
+    
+    this.sendMessage({
+      type: 'unsubscribe',
+      topic: topic
+    });
+    
+    console.log('📡 Unsubscribed from topic:', topic);
+  }
+
+  /**
+   * 메시지 핸들러 등록
+   */
+  public onMessage<T = any>(topicOrType: string, handler: MessageHandler<T>): void {
+    if (!this.messageHandlers.has(topicOrType)) {
+      this.messageHandlers.set(topicOrType, []);
+    }
+    this.messageHandlers.get(topicOrType)!.push(handler);
+  }
+
+  /**
+   * 메시지 핸들러 제거
+   */
+  public offMessage<T = any>(topicOrType: string, handler: MessageHandler<T>): void {
+    const handlers = this.messageHandlers.get(topicOrType);
+    if (handlers) {
+      const index = handlers.indexOf(handler);
+      if (index > -1) {
+        handlers.splice(index, 1);
+      }
+    }
+  }
+
+  /**
+   * 연결 상태 리스너 등록
+   */
+  public onConnectionChange(listener: (connected: boolean) => void): void {
+    this.connectionListeners.push(listener);
+  }
+
+  /**
+   * 연결 상태 리스너 제거
+   */
+  public offConnectionChange(listener: (connected: boolean) => void): void {
+    const index = this.connectionListeners.indexOf(listener);
+    if (index > -1) {
+      this.connectionListeners.splice(index, 1);
+    }
+  }
+
+  /**
+   * 수동 재연결
+   */
+  public reconnect(): void {
+    this.reconnectAttempts = 0;
+    if (this.reconnectTimeout) {
+      clearTimeout(this.reconnectTimeout);
+    }
+    this.connect();
+  }
+
+  /**
+   * 연결 상태 확인
+   */
+  public getConnectionState(): boolean {
+    return this.isConnected;
+  }
+
+  /**
+   * 구독 목록 조회
+   */
+  public getSubscriptions(): string[] {
+    return Array.from(this.subscriptions);
+  }
+
+  /**
+   * 서비스 종료
+   */
+  public disconnect(): void {
+    if (this.reconnectTimeout) {
+      clearTimeout(this.reconnectTimeout);
+    }
+    
+    if (this.ws) {
+      this.ws.close(1000, 'Client disconnect');
+    }
+    
+    this.isConnected = false;
+    this.subscriptions.clear();
+    this.messageHandlers.clear();
+    this.connectionListeners.length = 0;
+    this.messageQueue.length = 0;
+  }
+
+  /**
+   * 통계 정보
+   */
+  public getStats() {
+    return {
+      connected: this.isConnected,
+      reconnectAttempts: this.reconnectAttempts,
+      subscriptions: this.subscriptions.size,
+      handlers: this.messageHandlers.size,
+      queuedMessages: this.messageQueue.length,
+      readyState: this.ws?.readyState || -1
+    };
+  }
+}
+
+export default MqttWebSocketService;

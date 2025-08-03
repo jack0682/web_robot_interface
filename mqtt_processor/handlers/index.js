@@ -32,6 +32,7 @@ class HandlerManager {
 
   /**
    * 토픽에 따라 적절한 핸들러로 라우팅
+   * 이 메서드가 mqttClient에서 호출됨
    */
   routeMessage(topic, data) {
     try {
@@ -84,6 +85,13 @@ class HandlerManager {
         timestamp: new Date().toISOString()
       };
     }
+  }
+
+  /**
+   * 메시지 핸들링 (레거시 호환성)
+   */
+  handleMessage(topic, data) {
+    return this.routeMessage(topic, data);
   }
 
   /**
@@ -148,60 +156,10 @@ class HandlerManager {
   }
 
   /**
-   * 현재 농도 목표값 조회
+   * 농도 목표값 직접 설정
    */
-  getCurrentConcentrationTarget() {
-    return this.handlers.concentration.getCurrentTarget();
-  }
-
-  /**
-   * 무게센서 통계 조회
-   */
-  getWeightSensorStats() {
-    return this.handlers.weightSensor.getStats();
-  }
-
-  /**
-   * ROS2 토픽 분류 정보 조회
-   */
-  getROS2TopicCategories() {
-    const stats = this.handlers.ros2Topic.getStats();
-    return stats ? stats.categories : null;
-  }
-
-  /**
-   * 로봇 제어 명령 히스토리 조회
-   */
-  getRobotControlHistory(count = 10) {
-    return this.handlers.robotControl.getHistory(count);
-  }
-
-  /**
-   * 농도 설정 히스토리 조회
-   */
-  getConcentrationHistory(count = 10) {
-    return this.handlers.concentration.getHistory(count);
-  }
-
-  /**
-   * 무게센서 히스토리 조회
-   */
-  getWeightHistory(count = 10) {
-    return this.handlers.weightSensor.getHistory(count);
-  }
-
-  /**
-   * 핸들러 설정 업데이트
-   */
-  updateHandlerConfig(handlerName, config) {
-    if (this.handlers[handlerName] && this.handlers[handlerName].updateConfig) {
-      this.handlers[handlerName].updateConfig(config);
-      this.logger.info(`🔧 Updated configuration for ${handlerName} handler`);
-      return true;
-    }
-    
-    this.logger.warn(`⚠️  Handler ${handlerName} not found or doesn't support configuration updates`);
-    return false;
+  setConcentrationTarget(value, source = 'handler_manager') {
+    return this.handlers.concentration.setTarget(value, source);
   }
 
   /**
@@ -215,13 +173,6 @@ class HandlerManager {
     }
     
     return this.handlers.weightSensor.getStats();
-  }
-
-  /**
-   * 농도 목표값 직접 설정
-   */
-  setConcentrationTarget(value, source = 'handler_manager') {
-    return this.handlers.concentration.setTarget(value, source);
   }
 
   /**
@@ -279,50 +230,6 @@ class HandlerManager {
   }
 
   /**
-   * 모든 핸들러 리셋
-   */
-  resetAll() {
-    this.logger.info('🔄 Resetting all handlers...');
-    
-    // 통계 리셋
-    this.stats = {
-      totalProcessed: 0,
-      handlerStats: {},
-      lastUpdate: null
-    };
-
-    // 각 핸들러의 히스토리 클리어 (가능한 경우)
-    Object.keys(this.handlers).forEach(key => {
-      if (this.handlers[key].reset) {
-        this.handlers[key].reset();
-      }
-    });
-
-    this.logger.info('✅ All handlers reset complete');
-  }
-
-  /**
-   * 특정 핸들러의 상세 정보 조회
-   */
-  getHandlerDetails(handlerName) {
-    if (!this.handlers[handlerName]) {
-      return null;
-    }
-
-    const handler = this.handlers[handlerName];
-    const details = {
-      name: handlerName,
-      available_methods: Object.getOwnPropertyNames(Object.getPrototypeOf(handler))
-        .filter(name => name !== 'constructor' && typeof handler[name] === 'function'),
-      stats: handler.getStats ? handler.getStats() : null,
-      config: handler.config || null,
-      last_activity: this.stats.handlerStats[handlerName] || null
-    };
-
-    return details;
-  }
-
-  /**
    * 핸들러 성능 메트릭
    */
   getPerformanceMetrics() {
@@ -358,6 +265,37 @@ class HandlerManager {
     }
 
     return metrics;
+  }
+
+  /**
+   * 초기화 메서드 (레거시 호환성)
+   */
+  initialize(mqttClient) {
+    this.mqttClient = mqttClient;
+    this.logger.info('🔧 Handler Manager initialized with MQTT client reference');
+  }
+
+  /**
+   * 모든 핸들러 리셋
+   */
+  resetAll() {
+    this.logger.info('🔄 Resetting all handlers...');
+    
+    // 통계 리셋
+    this.stats = {
+      totalProcessed: 0,
+      handlerStats: {},
+      lastUpdate: null
+    };
+
+    // 각 핸들러의 히스토리 클리어 (가능한 경우)
+    Object.keys(this.handlers).forEach(key => {
+      if (this.handlers[key].reset) {
+        this.handlers[key].reset();
+      }
+    });
+
+    this.logger.info('✅ All handlers reset complete');
   }
 }
 

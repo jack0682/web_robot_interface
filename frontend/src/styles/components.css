@@ -1,0 +1,370 @@
+/**
+ * 컴포넌트 스타일
+ * 재사용 가능한 컴포넌트별 스타일 정의
+ */
+
+/* 헤더 컴포넌트 */
+.main-header {
+  @apply bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700;
+  transition: all var(--transition-normal);
+}
+
+.header-nav {
+  @apply flex items-center justify-between px-4 sm:px-6 lg:px-8 py-4;
+}
+
+.header-logo {
+  @apply flex items-center space-x-3;
+}
+
+.header-title {
+  @apply text-xl font-bold text-gray-900 dark:text-white;
+}
+
+.header-actions {
+  @apply flex items-center space-x-4;
+}
+
+/* 사이드바 컴포넌트 */
+.sidebar {
+  @apply bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 h-full;
+  transition: all var(--transition-normal);
+}
+
+.sidebar-nav {
+  @apply p-4 space-y-2;
+}
+
+.sidebar-item {
+  @apply flex items-center px-3 py-2 text-gray-700 dark:text-gray-300 rounded-lg 
+         hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors;
+}
+
+.sidebar-item.active {
+  @apply bg-blue-50 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 
+         border border-blue-200 dark:border-blue-800;
+}
+
+.sidebar-icon {
+  @apply w-5 h-5 mr-3;
+}
+
+/* 대시보드 그리드 */
+.dashboard-grid {
+  @apply grid gap-6;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+}
+
+.dashboard-widget {
+  @apply bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 
+         border border-gray-200 dark:border-gray-700;
+  transition: all var(--transition-normal);
+}
+
+.dashboard-widget:hover {
+  @apply shadow-xl transform scale-105;
+}
+
+.widget-header {
+  @apply flex items-center justify-between mb-4;
+}
+
+.widget-title {
+  @apply text-lg font-semibold text-gray-900 dark:text-white;
+}
+
+.widget-action {
+  @apply text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300;
+}
+
+/* 상태 패널 */
+.status-panel {
+  @apply bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg p-6 shadow-lg;
+}
+
+.status-panel.connected {
+  @apply from-green-500 to-green-600;
+}
+
+.status-panel.disconnected {
+  @apply from-red-500 to-red-600;
+}
+
+.status-panel.warning {
+  @apply from-yellow-500 to-yellow-600;
+}
+
+/* 센서 데이터 카드 */
+.sensor-card {
+  @apply bg-white dark:bg-gray-800 rounded-lg p-4 shadow-md 
+         border-l-4 border-blue-500 dark:border-blue-400;
+}
+
+.sensor-card.weight {
+  @apply border-l-blue-500 dark:border-l-blue-400;
+}
+
+.sensor-card.temperature {
+  @apply border-l-orange-500 dark:border-l-orange-400;
+}
+
+.sensor-card.concentration {
+  @apply border-l-green-500 dark:border-l-green-400;
+}
+
+.sensor-card.humidity {
+  @apply border-l-purple-500 dark:border-l-purple-400;
+}
+
+.sensor-value {
+  @apply text-2xl font-bold text-gray-900 dark:text-white;
+}
+
+.sensor-unit {
+  @apply text-sm text-gray-500 dark:text-gray-400 ml-1;
+}
+
+.sensor-label {
+  @apply text-sm font-medium text-gray-600 dark:text-gray-400 mb-1;
+}
+
+/* 차트 컨테이너 */
+.chart-container {
+  @apply bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6;
+}
+
+.chart-header {
+  @apply flex items-center justify-between mb-6;
+}
+
+.chart-title {
+  @apply text-lg font-semibold text-gray-900 dark:text-white;
+}
+
+.chart-controls {
+  @apply flex items-center space-x-2;
+}
+
+.chart-loading {
+  @apply flex items-center justify-center h-64;
+}
+
+/* 제어 패널 */
+.control-panel {
+  @apply bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 
+         border border-gray-200 dark:border-gray-700;
+}
+
+.control-section {
+  @apply mb-6 last:mb-0;
+}
+
+.control-section-title {
+  @apply text-lg font-semibold text-gray-900 dark:text-white mb-4;
+}
+
+.control-grid {
+  @apply grid grid-cols-2 md:grid-cols-4 gap-4;
+}
+
+.control-button {
+  @apply flex flex-col items-center justify-center p-4 rounded-lg 
+         border-2 border-gray-200 dark:border-gray-600 
+         hover:border-blue-300 dark:hover:border-blue-500
+         transition-all duration-200;
+}
+
+.control-button.active {
+  @apply border-blue-500 dark:border-blue-400 bg-blue-50 dark:bg-blue-900/50;
+}
+
+.control-button.disabled {
+  @apply opacity-50 cursor-not-allowed;
+}
+
+.control-icon {
+  @apply w-8 h-8 mb-2;
+}
+
+.control-label {
+  @apply text-sm font-medium text-gray-700 dark:text-gray-300;
+}
+
+/* 비상정지 버튼 */
+.emergency-stop {
+  @apply bg-red-600 hover:bg-red-700 text-white font-bold text-lg 
+         py-4 px-8 rounded-lg shadow-lg transform hover:scale-105 
+         transition-all duration-200;
+  animation: pulse 2s infinite;
+}
+
+.emergency-stop:hover {
+  animation: none;
+}
+
+/* 관절 제어 슬라이더 */
+.joint-control {
+  @apply space-y-4;
+}
+
+.joint-slider {
+  @apply w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer;
+}
+
+.joint-slider::-webkit-slider-thumb {
+  @apply appearance-none w-6 h-6 bg-blue-600 rounded-full cursor-pointer 
+         shadow-lg hover:bg-blue-700 transition-colors;
+}
+
+.joint-slider::-moz-range-thumb {
+  @apply w-6 h-6 bg-blue-600 rounded-full cursor-pointer border-0 
+         shadow-lg hover:bg-blue-700 transition-colors;
+}
+
+.joint-label {
+  @apply flex justify-between items-center mb-2;
+}
+
+.joint-name {
+  @apply text-sm font-medium text-gray-700 dark:text-gray-300;
+}
+
+.joint-value {
+  @apply text-sm font-mono text-gray-600 dark:text-gray-400;
+}
+
+/* 로봇 시각화 */
+.robot-canvas {
+  @apply border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-900;
+}
+
+.robot-controls {
+  @apply flex items-center justify-center space-x-4 mt-4;
+}
+
+/* 알림 컴포넌트 */
+.alert {
+  @apply rounded-lg p-4 mb-4 border-l-4;
+}
+
+.alert.info {
+  @apply bg-blue-50 dark:bg-blue-900/50 border-l-blue-500 text-blue-800 dark:text-blue-200;
+}
+
+.alert.success {
+  @apply bg-green-50 dark:bg-green-900/50 border-l-green-500 text-green-800 dark:text-green-200;
+}
+
+.alert.warning {
+  @apply bg-yellow-50 dark:bg-yellow-900/50 border-l-yellow-500 text-yellow-800 dark:text-yellow-200;
+}
+
+.alert.error {
+  @apply bg-red-50 dark:bg-red-900/50 border-l-red-500 text-red-800 dark:text-red-200;
+}
+
+.alert-icon {
+  @apply w-5 h-5 mr-2 flex-shrink-0;
+}
+
+.alert-content {
+  @apply flex items-start;
+}
+
+.alert-message {
+  @apply font-medium;
+}
+
+.alert-description {
+  @apply mt-1 text-sm opacity-90;
+}
+
+/* 모달 */
+.modal-overlay {
+  @apply fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50;
+}
+
+.modal-content {
+  @apply bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full mx-4 
+         transform transition-all duration-300;
+}
+
+.modal-header {
+  @apply px-6 py-4 border-b border-gray-200 dark:border-gray-700;
+}
+
+.modal-title {
+  @apply text-lg font-semibold text-gray-900 dark:text-white;
+}
+
+.modal-body {
+  @apply px-6 py-4;
+}
+
+.modal-footer {
+  @apply px-6 py-4 border-t border-gray-200 dark:border-gray-700 
+         flex justify-end space-x-3;
+}
+
+/* 로딩 상태 */
+.loading-container {
+  @apply flex items-center justify-center p-8;
+}
+
+.loading-spinner {
+  @apply w-8 h-8 border-4 border-gray-300 border-t-blue-600 rounded-full animate-spin;
+}
+
+.loading-text {
+  @apply ml-3 text-gray-600 dark:text-gray-400;
+}
+
+/* 빈 상태 */
+.empty-state {
+  @apply flex flex-col items-center justify-center p-8 text-center;
+}
+
+.empty-icon {
+  @apply w-16 h-16 text-gray-400 dark:text-gray-600 mb-4;
+}
+
+.empty-title {
+  @apply text-lg font-semibold text-gray-900 dark:text-white mb-2;
+}
+
+.empty-description {
+  @apply text-gray-600 dark:text-gray-400 mb-4;
+}
+
+/* 애니메이션 */
+.fade-enter {
+  @apply opacity-0;
+}
+
+.fade-enter-active {
+  @apply opacity-100 transition-opacity duration-300;
+}
+
+.fade-exit {
+  @apply opacity-100;
+}
+
+.fade-exit-active {
+  @apply opacity-0 transition-opacity duration-300;
+}
+
+.slide-enter {
+  @apply transform translate-x-full;
+}
+
+.slide-enter-active {
+  @apply transform translate-x-0 transition-transform duration-300;
+}
+
+.slide-exit {
+  @apply transform translate-x-0;
+}
+
+.slide-exit-active {
+  @apply transform translate-x-full transition-transform duration-300;
+}

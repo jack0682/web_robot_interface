@@ -1,8 +1,8 @@
 import React from 'react';
 import GridLayout from './GridLayout';
-import { useMqttConnection } from '@/hooks/useMqttConnection';
-import { useRobotData } from '@/hooks/useROS2Data';
-import { useSensorData } from '@/hooks/useSensorData';
+import { useMqttConnection } from '../../hooks/useMqttConnection';
+import { useRobotData } from '../../hooks/useROS2Data';
+import { useSensorData } from '../../hooks/useSensorData';
 
 const Dashboard: React.FC = () => {
   const { isConnected } = useMqttConnection();
@@ -36,11 +36,16 @@ const Dashboard: React.FC = () => {
         </p>
       </div>
       
-      <GridLayout 
-        robotStatus={robotStatus}
-        jointStates={jointStates}
-        sensorData={sensorData}
-      />
+      <GridLayout
+      robotStatus={robotStatus}
+      jointStates={jointStates}
+      sensorData={sensorData}
+      >
+        <div className="p-4">
+          <h1 className="text-2xl font-bold">Robot Dashboard</h1>
+          <p className="text-gray-600">Connected: {isConnected ? 'Yes' : 'No'}</p>
+        </div>
+      </GridLayout>
     </div>
   );
 };
