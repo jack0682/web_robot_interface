@@ -31,7 +31,6 @@ class MqttClient extends EventEmitter {
     return 'generic';
   }
 
-
   connect() {
     const connectUrl = `mqtt://${this.options.host}:${this.options.port}`;
     

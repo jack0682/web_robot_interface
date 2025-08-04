@@ -120,8 +120,8 @@ export const CHART_COLORS = [
 
 // MQTT 토픽 설정 - 정밀 수정된 토픽 매핑
 export const MQTT_TOPICS = {
-  WEIGHT_SENSOR: 'scale/raw',              // 무게센서 데이터 (아두이노)
-  ROS2_TOPICS: 'test',                     // ROS2 토픽 리스트 (모든 토픽 JSON 형식)
+  WEIGHT_SENSOR: 'test',              // 무게센서 데이터 (아두이노)
+  ROS2_TOPICS: 'ros2_topic_list',                     // ROS2 토픽 리스트 (모든 토픽 JSON 형식)
   CONCENTRATION: 'web/target_concentration', // 농도 목표값 (웹 인터페이스)
   ROBOT_CONTROL: 'robot/control/+',        // 로봇 제어 명령
   SYSTEM_HEALTH: 'system/health',          // 시스템 상태

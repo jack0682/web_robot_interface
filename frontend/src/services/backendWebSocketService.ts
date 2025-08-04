@@ -168,7 +168,7 @@ export class BackendWebSocketService {
         // ROS2 토픽 데이터
         const ros2Message: MqttMessage = {
           type: 'message',
-          topic: data.topic || 'test',
+          topic: data.topic || 'ros2_topic_list',
           data: data.data,
           timestamp: data.timestamp || new Date().toISOString()
         };
