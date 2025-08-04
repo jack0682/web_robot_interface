@@ -23,6 +23,7 @@ import RobotControl from './pages/RobotControl';
 import SensorMonitoring from './pages/SensorMonitoring';
 import DataVisualization from './pages/DataVisualization';
 import Settings from './pages/Settings';
+import ScrollTestPage from './components/debug/ScrollTestPage';
 
 // 스타일
 import './styles/globals.css';
@@ -69,7 +70,7 @@ function App() {
           <MqttProvider>
             <WebSocketProvider>
               <Router>
-                <div className="App min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors">
+                <div className="App flex-1 bg-gray-50 dark:bg-gray-900 transition-colors flex flex-col">
                   {/* 전역 알림 */}
                   <Toaster
                     position="top-right"
@@ -98,29 +99,34 @@ function App() {
 
                   {/* 시스템 상태 알림 */}
                   {!systemReady && (
-                    <div className="fixed top-0 left-0 right-0 bg-yellow-500 text-white text-center py-2 text-sm z-50">
+                    <div className="bg-yellow-500 text-white text-center py-2 text-sm z-50 flex-shrink-0">
                       ⚠️ 시스템이 완전히 준비되지 않았습니다. 일부 기능이 제한될 수 있습니다.
                     </div>
                   )}
 
-                  <Routes>
-                    <Route path="/" element={<MainLayout />}>
-                      {/* 메인 대시보드 */}
-                      <Route index element={<Dashboard />} />
-                      
-                      {/* 로봇 제어 */}
-                      <Route path="robot" element={<RobotControl />} />
-                      
-                      {/* 센서 모니터링 */}
-                      <Route path="sensors" element={<SensorMonitoring />} />
-                      
-                      {/* 데이터 시각화 */}
-                      <Route path="data" element={<DataVisualization />} />
-                      
-                      {/* 설정 */}
-                      <Route path="settings" element={<Settings />} />
-                    </Route>
-                  </Routes>
+                  <div className="flex-1 flex flex-col min-h-0">
+                    <Routes>
+                      <Route path="/" element={<MainLayout />}>
+                        {/* 메인 대시보드 */}
+                        <Route index element={<Dashboard />} />
+                        
+                        {/* 로봇 제어 */}
+                        <Route path="robot" element={<RobotControl />} />
+                        
+                        {/* 센서 모니터링 */}
+                        <Route path="sensors" element={<SensorMonitoring />} />
+                        
+                        {/* 데이터 시각화 */}
+                        <Route path="data" element={<DataVisualization />} />
+                        
+                        {/* 설정 */}
+                        <Route path="settings" element={<Settings />} />
+                        
+                        {/* 스크롤 테스트 */}
+                        <Route path="scroll-test" element={<ScrollTestPage />} />
+                      </Route>
+                    </Routes>
+                  </div>
                 </div>
               </Router>
             </WebSocketProvider>

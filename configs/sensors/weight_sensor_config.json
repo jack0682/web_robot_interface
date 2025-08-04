@@ -1,12 +1,12 @@
 {
   "weight_sensor": {
     "model": "HX711_LoadCell",
-    "capacity": 50,
-    "unit": "kg",
+    "capacity": 50000,
+    "unit": "g",
     "precision": 0.01,
     "calibration": {
       "offset": 0,
-      "scale": 2280,
+      "scale": 2.28,
       "reference_weight": 1.0
     },
     "sampling_rate": 10,

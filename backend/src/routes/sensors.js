@@ -1,6 +1,10 @@
 /**
- * 센서 데이터 API 라우터
+ * 센서 데이터 API 라우터 - 정밀 수정
  * 무게센서, 농도 등 센서 데이터 관리
+ * 
+ * 🎯 토픽 매핑 수정:
+ * - test: ROS2 토픽 리스트
+ * - scale/raw: 무게센서 데이터
  */
 const express = require('express');
 const Joi = require('joi');
@@ -55,16 +59,23 @@ const validateInput = (schema) => {
 
 /**
  * @route GET /api/sensors/all
- * @desc 모든 센서 데이터 조회
+ * @desc 모든 센서 데이터 조회 - 토픽명 수정
  */
 router.get('/all', requireMqttConnection, async (req, res) => {
   try {
     const allData = mqttService.getLatestData();
     
-    // 센서 데이터만 필터링
+    // 🎯 센서 데이터만 필터링 - 정확한 토픽명 사용
     const sensorData = {
-      weight: allData['topic'] || null,  // 아두이노 무게센서
-      concentration: allData['web/target_concentration'] || null,
+      weight: allData['test'] || null,  // 🟢 무게센서 데이터
+      concentration: allData['web/target_concentration'] || null,  // 🟢 농도 목표값
+      ros2_topics: allData['ros2_topic_list'] || null,  // 🟢 ROS2 토픽 리스트
+      system_health: allData['system/health'] || null,  // 🟢 시스템 상태
+      connection_status: {
+        mqtt_connected: mqttService.isHealthy(),
+        data_cache_size: Object.keys(allData).length,
+        available_topics: Object.keys(allData)
+      },
       timestamp: new Date().toISOString()
     };
     
@@ -80,22 +91,46 @@ router.get('/all', requireMqttConnection, async (req, res) => {
 
 /**
  * @route GET /api/sensors/weight
- * @desc 무게센서 데이터 조회
+ * @desc 무게센서 데이터 조회 - 토픽명 수정
  */
 router.get('/weight', requireMqttConnection, async (req, res) => {
   try {
+    // 🎯 'scale/raw' 토픽에서 무게센서 데이터 가져오기
     const weightData = mqttService.getWeightSensorData();
     
     if (!weightData) {
       return res.status(404).json({
         error: 'Weight sensor data not available',
-        message: 'No weight sensor data received yet',
+        message: 'No weight sensor data received from scale/raw topic yet',
+        expected_topic: 'test',
+        available_topics: Object.keys(mqttService.getLatestData() || {}),
         timestamp: new Date().toISOString()
       });
     }
     
+    // 무게 데이터 파싱 및 정규화
+    let parsedWeight = 0;
+    let unit = 'g';
+    let rawData = weightData.data;
+    
+    // 데이터 타입에 따른 파싱
+    if (typeof rawData === 'object') {
+      parsedWeight = parseFloat(rawData.weight || rawData.value || rawData.data || 0);
+      unit = rawData.unit || 'g';
+    } else if (typeof rawData === 'number') {
+      parsedWeight = rawData;
+    } else if (typeof rawData === 'string') {
+      parsedWeight = parseFloat(rawData) || 0;
+    }
+    
     res.json({
-      weight: weightData.data,
+      weight: {
+        value: parsedWeight,
+        unit: unit,
+        status: parsedWeight > 0 ? 'active' : 'inactive'
+      },
+      raw_data: rawData,
+      topic: 'scale/raw',
       last_updated: weightData.timestamp,
       api_timestamp: new Date().toISOString()
     });
@@ -110,17 +145,20 @@ router.get('/weight', requireMqttConnection, async (req, res) => {
 
 /**
  * @route GET /api/sensors/weight/history
- * @desc 무게센서 히스토리 조회
+ * @desc 무게센서 히스토리 조회 - 토픽명 수정
  */
 router.get('/weight/history', requireMqttConnection, async (req, res) => {
   try {
     const count = parseInt(req.query.count) || 50;
-    const history = mqttService.getDataHistory('topic', count);
+    
+    // 🎯 'scale/raw' 토픽의 히스토리 가져오기
+    const history = mqttService.getDataHistory('test', count);
     
     res.json({
       history: history,
       count: history.length,
       requested_count: count,
+      topic: 'test',
       timestamp: new Date().toISOString()
     });
   } catch (error) {
@@ -134,17 +172,28 @@ router.get('/weight/history', requireMqttConnection, async (req, res) => {
 
 /**
  * @route POST /api/sensors/weight/calibrate
- * @desc 무게센서 캘리브레이션
+ * @desc 무게센서 캘리브레이션 - 토픽명 수정
  */
 router.post('/weight/calibrate', requireMqttConnection, validateInput(schemas.calibrateWeight), async (req, res) => {
   try {
     const { offset } = req.validatedData;
+    
+    // 🎯 아두이노 캘리브레이션 토픽으로 메시지 발행
     const result = mqttService.calibrateWeightSensor(offset);
+    
+    // 추가적으로 직접 MQTT 메시지도 발행
+    await mqttService.publishMessage('scale/calibrate', {
+      command: 'calibrate',
+      offset: offset,
+      source: 'backend_api',
+      timestamp: new Date().toISOString()
+    }, { qos: 1 });
     
     res.json({
       success: true,
       message: offset !== undefined ? 'Weight sensor calibrated with offset' : 'Weight sensor zero calibration completed',
       calibration: result,
+      target_topic: 'scale/calibrate',
       timestamp: new Date().toISOString()
     });
   } catch (error) {
@@ -298,7 +347,7 @@ router.get('/performance', requireMqttConnection, async (req, res) => {
       weight_sensor: performance.handler_stats?.handlers?.weightSensor || null,
       concentration: performance.handler_stats?.handlers?.concentration || null,
       data_cache_size: performance.data_cache_size,
-      mqtt_connected: performance.mqtt_connected,
+      mqtt_connected: performance.websocket_connected,
       uptime: performance.uptime,
       memory: performance.memory,
       timestamp: performance.timestamp
@@ -323,6 +372,7 @@ router.get('/health', requireMqttConnection, async (req, res) => {
     const currentStatus = mqttService.getCurrentStatus();
     const latestWeight = mqttService.getWeightSensorData();
     const latestConcentration = mqttService.getLatestData('web/target_concentration');
+    const latestROS2 = mqttService.getROS2Topics();
     
     const healthStatus = {
       overall_status: 'healthy',
@@ -330,23 +380,32 @@ router.get('/health', requireMqttConnection, async (req, res) => {
         weight: {
           status: latestWeight ? 'active' : 'inactive',
           last_data: latestWeight?.timestamp || null,
-          data_available: !!latestWeight
+          data_available: !!latestWeight,
+          topic: 'scale/raw'
         },
         concentration: {
           status: latestConcentration ? 'active' : 'inactive',
           last_data: latestConcentration?.timestamp || null,
-          data_available: !!latestConcentration
+          data_available: !!latestConcentration,
+          topic: 'web/target_concentration'
+        },
+        ros2_topics: {
+          status: latestROS2 ? 'active' : 'inactive',
+          last_data: latestROS2?.timestamp || null,
+          data_available: !!latestROS2,
+          topic: 'test'
         }
       },
-      mqtt_connection: currentStatus?.mqtt?.connected || false,
-      websocket_clients: currentStatus?.websocket?.clients || 0,
+      mqtt_connection: currentStatus?.connected || false,
+      cache_size: currentStatus?.cache_size || 0,
+      reconnect_attempts: currentStatus?.reconnect_attempts || 0,
       timestamp: new Date().toISOString()
     };
     
     // 전체 상태 결정
     if (!healthStatus.mqtt_connection) {
       healthStatus.overall_status = 'degraded';
-    } else if (!healthStatus.sensors.weight.data_available && !healthStatus.sensors.concentration.data_available) {
+    } else if (!healthStatus.sensors.weight.data_available && !healthStatus.sensors.concentration.data_available && !healthStatus.sensors.ros2_topics.data_available) {
       healthStatus.overall_status = 'warning';
     }
     

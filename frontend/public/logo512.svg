@@ -1,0 +1,69 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background Circle -->
+  <circle cx="256" cy="256" r="256" fill="#2563eb"/>
+  
+  <!-- Robot Head -->
+  <rect x="192" y="150" width="128" height="106" rx="20" fill="white"/>
+  
+  <!-- Eyes -->
+  <circle cx="224" cy="192" r="12" fill="#2563eb"/>
+  <circle cx="288" cy="192" r="12" fill="#2563eb"/>
+  
+  <!-- Eye Details -->
+  <circle cx="226" cy="190" r="4" fill="white"/>
+  <circle cx="290" cy="190" r="4" fill="white"/>
+  
+  <!-- Mouth -->
+  <rect x="236" y="220" width="40" height="6" rx="3" fill="#2563eb"/>
+  
+  <!-- Antenna -->
+  <rect x="252" y="130" width="8" height="20" rx="4" fill="white"/>
+  <circle cx="256" cy="125" r="6" fill="#f59e0b"/>
+  
+  <!-- Robot Body -->
+  <rect x="170" y="256" width="172" height="128" rx="20" fill="white"/>
+  
+  <!-- Control Panel -->
+  <rect x="200" y="288" width="112" height="64" rx="12" fill="#2563eb"/>
+  
+  <!-- Control Buttons -->
+  <circle cx="230" cy="315" r="8" fill="white"/>
+  <circle cx="282" cy="315" r="8" fill="white"/>
+  <rect x="240" y="340" width="32" height="6" rx="3" fill="white"/>
+  
+  <!-- Status Lights -->
+  <circle cx="210" cy="340" r="4" fill="#10b981"/>
+  <circle cx="302" cy="340" r="4" fill="#ef4444"/>
+  
+  <!-- Arms -->
+  <rect x="128" y="280" width="42" height="20" rx="10" fill="white"/>
+  <rect x="342" y="280" width="42" height="20" rx="10" fill="white"/>
+  
+  <!-- Hands/Grippers -->
+  <circle cx="128" cy="290" r="16" fill="#f59e0b"/>
+  <circle cx="384" cy="290" r="16" fill="#f59e0b"/>
+  
+  <!-- Gripper Details -->
+  <rect x="120" y="285" width="16" height="2" rx="1" fill="#2563eb"/>
+  <rect x="120" y="289" width="16" height="2" rx="1" fill="#2563eb"/>
+  <rect x="120" y="293" width="16" height="2" rx="1" fill="#2563eb"/>
+  
+  <rect x="376" y="285" width="16" height="2" rx="1" fill="#2563eb"/>
+  <rect x="376" y="289" width="16" height="2" rx="1" fill="#2563eb"/>
+  <rect x="376" y="293" width="16" height="2" rx="1" fill="#2563eb"/>
+  
+  <!-- Legs -->
+  <rect x="212" y="384" width="20" height="64" rx="10" fill="white"/>
+  <rect x="280" y="384" width="20" height="64" rx="10" fill="white"/>
+  
+  <!-- Feet/Base -->
+  <ellipse cx="222" cy="470" rx="24" ry="12" fill="#6b7280"/>
+  <ellipse cx="290" cy="470" rx="24" ry="12" fill="#6b7280"/>
+  
+  <!-- Joint Details -->
+  <circle cx="222" cy="400" r="6" fill="#6b7280"/>
+  <circle cx="290" cy="400" r="6" fill="#6b7280"/>
+  
+  <!-- Brand Text -->
+  <text x="256" y="500" font-family="Arial, sans-serif" font-size="24" font-weight="bold" text-anchor="middle" fill="white">M0609</text>
+</svg>

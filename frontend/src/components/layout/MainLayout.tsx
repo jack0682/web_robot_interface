@@ -8,14 +8,14 @@ const MainLayout: React.FC = () => {
   const [sidebarOpen, setSidebarOpen] = React.useState(false);
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="flex-1 bg-gray-50 dark:bg-gray-900 flex flex-col">
       {/* Header */}
       <Header 
         onMenuClick={() => setSidebarOpen(!sidebarOpen)}
         sidebarOpen={sidebarOpen}
       />
 
-      <div className="flex h-[calc(100vh-4rem)]">
+      <div className="flex flex-1 min-h-0">
         {/* Sidebar */}
         <Sidebar 
           isOpen={sidebarOpen}
@@ -23,8 +23,8 @@ const MainLayout: React.FC = () => {
         />
 
         {/* Main Content */}
-        <main className="flex-1 overflow-hidden">
-          <div className="h-full p-4">
+        <main className="flex-1 overflow-y-auto">
+          <div className="p-4 min-h-full">
             <Outlet />
           </div>
         </main>

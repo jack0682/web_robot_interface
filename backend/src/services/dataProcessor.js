@@ -58,14 +58,23 @@ class DataProcessor {
 
   // 무게 센서 데이터 처리
   processWeightData(rawData) {
+    const unit = rawData.unit || 'kg';
+    let weight = parseFloat(rawData.weight || 0);
+
+    // g → kg 변환
+    if (unit === 'g') {
+      weight = weight / 1000;
+    }
+
     return {
-      weight: this.filterNoiseAndCalibrate(rawData.weight || 0),
-      unit: 'kg',
+      weight: this.filterNoiseAndCalibrate(weight),
+      unit: unit,
       calibrated: true,
-      quality: this.assessDataQuality(rawData.weight),
-      timestamp: new Date().toISOString()
+      quality: this.assessDataQuality(weight * (unit === 'g' ? 1000 : 1)),
+      timestamp: rawData.timestamp || new Date().toISOString()
     };
   }
+
 
   // 농도 센서 데이터 처리
   processConcentrationData(rawData) {
@@ -173,13 +182,15 @@ class DataProcessor {
     if (value === null || value === undefined || isNaN(value)) {
       return 'poor';
     }
-    
-    // 임의의 품질 평가 로직
+
     const absValue = Math.abs(value);
-    if (absValue > 1000) return 'poor';
-    if (absValue > 500) return 'fair';
+
+    // → g 단위로 평가
+    if (absValue > 50000) return 'poor';
+    if (absValue > 20000) return 'fair';
     return 'good';
   }
+
 
   // 데이터 저장
   storeData(key, data) {

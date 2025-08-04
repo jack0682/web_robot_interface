@@ -6,12 +6,12 @@ import { AppConfig } from './types/robotTypes';
 
 // 환경 변수 기본값
 const CONFIG: AppConfig = {
-  // API 설정
-  API_BASE_URL: process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000',
-  WS_URL: process.env.REACT_APP_WS_URL || 'ws://localhost:8081',
+  // API 설정 - Backend 포트 5001로 수정
+  API_BASE_URL: process.env.REACT_APP_API_BASE_URL || 'http://localhost:5001',
+  WS_URL: process.env.REACT_APP_WS_URL || 'ws://localhost:8080',
   
-  // MQTT 설정
-  MQTT_BROKER_URL: process.env.REACT_APP_MQTT_BROKER_URL || 'ws://localhost:9001',
+  // MQTT 설정 - Backend WebSocket으로 변경
+  MQTT_BROKER_URL: process.env.REACT_APP_MQTT_BROKER_URL || 'ws://localhost:8080',
   MQTT_CLIENT_ID: process.env.REACT_APP_MQTT_CLIENT_ID || `robot_dashboard_${Date.now()}`,
   
   // 로봇 설정
@@ -36,7 +36,7 @@ const CONFIG: AppConfig = {
   
   // MQTT 상세 설정
   MQTT: {
-    brokerUrl: process.env.REACT_APP_MQTT_BROKER_URL || 'ws://localhost:9001',
+    brokerUrl: process.env.REACT_APP_MQTT_BROKER_URL || 'ws://localhost:8080',
     clientId: process.env.REACT_APP_MQTT_CLIENT_ID || `robot_dashboard_${Date.now()}`,
     keepalive: 60,
     reconnectPeriod: 1000,
@@ -59,10 +59,10 @@ const CONFIG: AppConfig = {
   
   // WebSocket 설정
   websocket: {
-    url: process.env.REACT_APP_WS_URL || 'ws://localhost:8081',
-    maxReconnectAttempts: 5,
-    reconnectDelay: 1000,
-    pingInterval: 30000,
+    url: process.env.REACT_APP_WS_URL || 'ws://localhost:8080',
+    maxReconnectAttempts: 3, // 재연결 시도 횟수 감소
+    reconnectDelay: 2000, // 재연결 지연 증가
+    pingInterval: 60000, // Ping 간격 증가 (1분)
     pongTimeout: 10000
   }
 };
@@ -118,16 +118,18 @@ export const CHART_COLORS = [
   '#8b5cf6', '#06b6d4', '#ec4899', '#84cc16'
 ];
 
-// MQTT 토픽 설정
+// MQTT 토픽 설정 - 정밀 수정된 토픽 매핑
 export const MQTT_TOPICS = {
-  WEIGHT_SENSOR: 'topic',
-  CONCENTRATION: 'web/target_concentration',
-  ROS2_TOPICS: 'ros2_topic_list',
-  ROBOT_CONTROL: 'robot/control/+',
+  WEIGHT_SENSOR: 'scale/raw',              // 무게센서 데이터 (아두이노)
+  ROS2_TOPICS: 'test',                     // ROS2 토픽 리스트 (모든 토픽 JSON 형식)
+  CONCENTRATION: 'web/target_concentration', // 농도 목표값 (웹 인터페이스)
+  ROBOT_CONTROL: 'robot/control/+',        // 로봇 제어 명령
+  SYSTEM_HEALTH: 'system/health',          // 시스템 상태
+  
+  // 하위 호환성 유지
   ROBOT_STATUS: 'robot/status',
   ROBOT_JOINTS: 'robot/joint_positions',
   ROBOT_ERROR: 'robot/error',
-  SYSTEM_HEALTH: 'system/health',
   SYSTEM_PING: 'system/ping'
 };
 
@@ -243,7 +245,7 @@ const getEnvironmentConfig = (): AppConfig => {
         },
         MQTT: {
           ...CONFIG.MQTT,
-          brokerUrl: 'ws://localhost:9001', // 테스트용 브로커
+          brokerUrl: 'ws://localhost:8080', // 테스트용 브로커
           clientId: `test_client_${Date.now()}`
         }
       };

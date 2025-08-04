@@ -1,310 +1,542 @@
 /**
- * MQTT Client for Robot Web Dashboard
- * EMQX Cloud Integration with WebSocket Bridge + HTTP Status Server
+ * Updated MQTT Client with proper topic mapping and configuration support
+ * EMQX Cloud SSL/TLS Connection + Real Topic Structure
  */
-
 const mqtt = require('mqtt');
 const WebSocket = require('ws');
-const http = require('http');
-const Logger = require('./logger');
-const DataBuffer = require('./dataBuffer');
-const HandlerManager = require('../handlers');
 const fs = require('fs');
 const path = require('path');
+const EventEmitter = require('events');
+
+class DataBuffer extends EventEmitter {
+  constructor(maxSize = 2000) {
+    super();
+    this.maxSize = maxSize;
+    this.data = new Map();
+    this.topicStats = new Map();
+  }
+
+  add(topic, message, timestamp = new Date().toISOString()) {
+    if (!this.data.has(topic)) {
+      this.data.set(topic, []);
+      this.topicStats.set(topic, { count: 0, lastUpdate: timestamp });
+    }
+
+    const topicData = this.data.get(topic);
+    topicData.push({ message, timestamp });
+
+    // 버퍼 크기 제한
+    if (topicData.length > this.maxSize) {
+      topicData.shift();
+    }
+
+    // 통계 업데이트
+    const stats = this.topicStats.get(topic);
+    stats.count++;
+    stats.lastUpdate = timestamp;
+
+    this.emit('data', topic, message, timestamp);
+  }
+
+  get(topic, count = 10) {
+    const topicData = this.data.get(topic);
+    if (!topicData) return [];
+    return topicData.slice(-count);
+  }
+
+  getAllTopics() {
+    return Array.from(this.data.keys());
+  }
+
+  getStats() {
+    const stats = {};
+    for (const [topic, data] of this.topicStats.entries()) {
+      stats[topic] = {
+        ...data,
+        current_buffer_size: this.data.get(topic)?.length || 0
+      };
+    }
+    return stats;
+  }
+
+  clear(topic = null) {
+    if (topic) {
+      this.data.delete(topic);
+      this.topicStats.delete(topic);
+    } else {
+      this.data.clear();
+      this.topicStats.clear();
+    }
+  }
+}
 
 class MqttClient {
   constructor(config) {
-    this.config = {
-      mqtt: {
-        host: config.mqttHost || 'localhost',
-        port: config.mqttPort || 1883,
-        username: config.mqttUsername || '',
-        password: config.mqttPassword || '',
-        protocol: config.mqttPort === 8883 ? 'mqtts' : 'mqtt',
-        keepalive: 60,
-        reconnectPeriod: config.reconnectInterval || 5000,
-        connectTimeout: 30000,
-        clean: true,
-        clientId: `robot_dashboard_processor_${Date.now()}`
-      },
-      websocket: {
-        port: config.wsPort || 8080
-      },
-      topics: {
-        ros2_topic_list: 'ros2_topic_list',
-        weight_sensor: 'topic',
-        concentration_target: 'web/target_concentration',
-        robot_control: 'robot/control/+',
-        system_health: 'system/health',
-        sensor_data: 'sensors/+',
-        error_messages: 'errors/+'
-      },
-      buffer: {
-        maxSize: config.maxBufferSize || 2000,
-        retentionHours: config.dataRetentionHours || 48
-      },
-      performance: {
-        heartbeatInterval: config.heartbeatInterval || 30000,
-        maxReconnectAttempts: config.maxReconnectAttempts || 10
-      },
-      debug: config.debugMode || false,
-      verbose: config.enableVerboseLogging || false
-    };
-
-    this.logger = new Logger('MqttClient');
-    this.mqttClient = null;
-    this.wsServer = null;
-    this.httpServer = null;
+    this.config = this.loadConfiguration(config);
+    this.client = null;
+    this.wss = null;
     this.wsClients = new Set();
     this.isConnected = false;
-    this.reconnectAttempts = 0;
-    this.lastHeartbeat = null;
+    this.dataBuffer = new DataBuffer(this.config.data_processing.buffer_size);
+    this.connectionAttempts = 0;
+    this.maxReconnectAttempts = 10;
+    this.logger = null;
+    
+    // Performance metrics
+    this.startTime = Date.now();
+    this.messageCount = 0;
+    this.lastHealthCheck = Date.now();
+  }
 
-    // 데이터 버퍼 초기화
-    this.dataBuffer = new DataBuffer(this.config.buffer.maxSize);
-    
-    // 핸들러 매니저는 initialize에서 생성
-    this.handlerManager = null;
-    
-    // ROS2 토픽 캐시
-    this.ros2TopicCache = [];
-    
-    // 통계 정보
-    this.stats = {
-      messagesReceived: 0,
-      messagesPublished: 0,
-      errorsCount: 0,
-      startTime: new Date(),
-      lastMessageTime: null
+  /**
+   * Load configuration from file or use defaults
+   */
+  loadConfiguration(config) {
+    if (typeof config === 'string') {
+      // Load from file path
+      try {
+        const configPath = path.resolve(config);
+        const configData = fs.readFileSync(configPath, 'utf8');
+        return JSON.parse(configData);
+      } catch (error) {
+        console.error('Failed to load config file:', error);
+        return this.getDefaultConfig();
+      }
+    } else if (typeof config === 'object' && config !== null) {
+      // Use provided config object
+      return { ...this.getDefaultConfig(), ...config };
+    } else {
+      // Use default config
+      return this.getDefaultConfig();
+    }
+  }
+
+  /**
+   * Default configuration
+   */
+  getDefaultConfig() {
+    return {
+      mqtt: {
+        connection: {
+          host: 'p021f2cb.ala.asia-southeast1.emqxsl.com',
+          port: 8883,
+          protocol: 'mqtts',
+          reconnectPeriod: 5000,
+          connectTimeout: 30000,
+          keepalive: 60,
+          clean: true,
+          rejectUnauthorized: true
+        },
+        topics: {
+          weight_sensor: { name: 'test', qos: 1, retain: false },  // 무게 센서 데이터
+          ros2_topic_list: { name: 'ros2_topic_list', qos: 1, retain: true },
+          target_concentration: { name: 'web/target_concentration', qos: 1, retain: true },
+          robot_control: { name: 'robot/control/+', qos: 2, retain: false },
+          system_health: { name: 'system/health', qos: 0, retain: true }
+        }
+      },
+      websocket: {
+        port: 8080,
+        ping_interval: 30000,
+        pong_timeout: 5000,
+        max_clients: 100
+      },
+      data_processing: {
+        buffer_size: 2000,
+        retention_hours: 48
+      }
     };
   }
 
+  /**
+   * Set logger instance
+   */
+  setLogger(logger) {
+    this.logger = logger;
+  }
+
+  /**
+   * Log message with fallback to console
+   */
+  log(level, message, meta = {}) {
+    if (this.logger) {
+      this.logger[level](message, meta);
+    } else {
+      console.log(`[${level.toUpperCase()}] ${message}`, meta);
+    }
+  }
+
+  /**
+   * Initialize MQTT connection and WebSocket server
+   */
   async initialize() {
-    this.logger.info('🔌 Initializing MQTT Client...');
-    
     try {
-      // MQTT 클라이언트 생성 및 연결
+      this.log('info', '🔌 Initializing MQTT Client...');
+      
+      // Setup WebSocket server first
+      await this.setupWebSocketServer();
+      
+      // Connect to MQTT broker
       await this.connectMqtt();
       
-      // WebSocket 서버 시작 (HTTP 서버 포함)
-      await this.startWebSocketServer();
+      // Setup data processing
+      this.setupDataProcessing();
       
-      // 핸들러 매니저 초기화 (MQTT 연결 후)
-      this.handlerManager = new HandlerManager(this.logger, this.dataBuffer);
+      // Setup health monitoring
+      this.setupHealthMonitoring();
       
-      // 토픽 핸들러 설정
-      this.setupTopicHandlers();
-      
-      // 하트비트 시작
-      this.startHeartbeat();
-      
-      this.logger.info('✅ MQTT Client initialized successfully');
+      this.log('info', '✅ MQTT Client initialized successfully');
       return true;
       
     } catch (error) {
-      this.logger.error('❌ Failed to initialize MQTT Client:', error);
+      this.log('error', '❌ Failed to initialize MQTT Client:', { error: error.message });
       throw error;
     }
   }
 
+  /**
+   * Connect to MQTT broker with SSL/TLS
+   */
   async connectMqtt() {
     return new Promise((resolve, reject) => {
-      const connectionOptions = {
-        ...this.config.mqtt,
-        will: {
-          topic: this.config.topics.system_health,
-          payload: JSON.stringify({
-            status: 'disconnected',
-            message: 'MQTT Processor disconnected unexpectedly',
-            timestamp: new Date().toISOString()
-          }),
-          qos: 1,
-          retain: false
-        }
+      const { connection } = this.config.mqtt;
+      
+      // MQTT connection options
+      const options = {
+        host: connection.host,
+        port: connection.port,
+        protocol: connection.protocol,
+        username: process.env.MQTT_USERNAME,
+        password: process.env.MQTT_PASSWORD,
+        connectTimeout: connection.connectTimeout,
+        reconnectPeriod: connection.reconnectPeriod,
+        keepalive: connection.keepalive,
+        clean: connection.clean,
+        rejectUnauthorized: connection.rejectUnauthorized
       };
 
-      // SSL/TLS 설정 (EMQX Cloud용)
-      if (this.config.mqtt.protocol === 'mqtts') {
-        connectionOptions.rejectUnauthorized = false; // 개발용 설정
-      }
+      this.log('info', `🌐 Connecting to MQTT broker: ${connection.protocol}://${connection.host}:${connection.port}`);
+      
+      this.client = mqtt.connect(`${connection.protocol}://${connection.host}:${connection.port}`, options);
 
-      this.logger.info(`🔗 Connecting to MQTT broker: ${this.config.mqtt.protocol}://${this.config.mqtt.host}:${this.config.mqtt.port}`);
-
-      this.mqttClient = mqtt.connect(connectionOptions);
-
-      this.mqttClient.on('connect', () => {
+      this.client.on('connect', () => {
+        this.log('info', '🟢 MQTT connected successfully');
         this.isConnected = true;
-        this.reconnectAttempts = 0;
-        this.logger.info('✅ MQTT connected successfully');
-        
-        // 토픽 구독
+        this.connectionAttempts = 0;
         this.subscribeToTopics();
         resolve();
       });
 
-      this.mqttClient.on('error', (error) => {
-        this.logger.error('❌ MQTT connection error:', error);
-        this.isConnected = false;
-        this.stats.errorsCount++;
-        
-        if (this.reconnectAttempts === 0) {
-          reject(error);
-        }
-      });
-
-      this.mqttClient.on('close', () => {
-        this.isConnected = false;
-        this.logger.warn('⚠️  MQTT connection closed');
-      });
-
-      this.mqttClient.on('reconnect', () => {
-        this.reconnectAttempts++;
-        this.logger.info(`🔄 MQTT reconnecting... (attempt ${this.reconnectAttempts})`);
-        
-        if (this.reconnectAttempts > this.config.performance.maxReconnectAttempts) {
-          this.logger.error('❌ Max reconnection attempts reached');
-          this.mqttClient.end();
-        }
-      });
-
-      this.mqttClient.on('message', (topic, message) => {
+      this.client.on('message', (topic, message) => {
         this.handleMqttMessage(topic, message);
       });
-    });
-  }
 
-  subscribeToTopics() {
-    const topics = Object.values(this.config.topics);
-    
-    topics.forEach(topic => {
-      this.mqttClient.subscribe(topic, { qos: 1 }, (error) => {
-        if (error) {
-          this.logger.error(`❌ Failed to subscribe to ${topic}:`, error);
-        } else {
-          this.logger.info(`📡 Subscribed to ${topic}`);
-        }
+      this.client.on('error', (error) => {
+        this.log('error', '❌ MQTT connection error:', { error: error.message });
+        this.isConnected = false;
+        reject(error);
+      });
+
+      this.client.on('close', () => {
+        this.log('warn', '⚠️  MQTT connection closed');
+        this.isConnected = false;
+      });
+
+      this.client.on('reconnect', () => {
+        this.connectionAttempts++;
+        this.log('info', `🔄 MQTT reconnecting... (attempt ${this.connectionAttempts})`);
+      });
+
+      this.client.on('offline', () => {
+        this.log('warn', '📴 MQTT client offline');
+        this.isConnected = false;
       });
     });
   }
 
+  /**
+   * Subscribe to configured topics
+   */
+  subscribeToTopics() {
+    const topics = this.config.mqtt.topics;
+    
+    for (const [key, topicConfig] of Object.entries(topics)) {
+      this.client.subscribe(topicConfig.name, { qos: topicConfig.qos }, (err) => {
+        if (err) {
+          this.log('error', `❌ Failed to subscribe to ${topicConfig.name}:`, { error: err.message });
+        } else {
+          this.log('info', `📡 Subscribed to topic: ${topicConfig.name} (${key})`);
+        }
+      });
+    }
+  }
+
+  /**
+   * Handle incoming MQTT messages
+   */
   handleMqttMessage(topic, message) {
     try {
-      this.stats.messagesReceived++;
-      this.stats.lastMessageTime = new Date();
+      this.messageCount++;
+      const timestamp = new Date().toISOString();
       
-      let data;
-      try {
-        data = JSON.parse(message.toString());
-      } catch (parseError) {
-        // JSON이 아닌 경우 문자열로 처리
-        data = message.toString();
-      }
-
-      if (this.config.verbose) {
-        this.logger.debug(`📨 Message received from ${topic}:`, data);
-      }
-
-      // 데이터 버퍼에 저장
-      this.dataBuffer.addData(topic, data);
-
-      // 핸들러에게 메시지 전달 (핸들러 매니저가 초기화된 경우에만)
-      let handlerResult = null;
-      if (this.handlerManager) {
-        handlerResult = this.handlerManager.routeMessage(topic, data);
-      }
+      // Parse message based on topic
+      let parsedMessage;
       
-      // 처리 결과를 WebSocket으로 브로드캐스트
-      const broadcastData = {
+      if (topic === 'test') {
+        // 🎯 무게 센서 데이터 - 실제 무게 센서
+        parsedMessage = this.parseWeightSensorData(message);
+        this.log('debug', '⚖️  Weight sensor data received', { value: parsedMessage.weight });
+        
+      } else if (topic === 'ros2_topic_list') {
+        // 🎯 ROS2 topic list - 모든 토픽이 묶여서 전송
+        parsedMessage = this.parseROS2TopicList(message);
+        this.log('debug', '📋 ROS2 topic list received', { topic_count: Object.keys(parsedMessage.topic_data || {}).length });
+        
+      } else if (topic === 'scale/raw') {
+        // 기존 무게센서 토픽 (호환성 유지)
+        parsedMessage = this.parseWeightSensorData(message);
+        this.log('debug', '⚖️  Legacy weight sensor data received', { value: parsedMessage.weight });
+        
+      } else if (topic === 'web/target_concentration') {
+        // Target concentration - expect JSON
+        parsedMessage = this.parseConcentrationData(message);
+        this.log('debug', '🎯 Target concentration received', { target: parsedMessage.target });
+        
+      } else if (topic.startsWith('robot/control/')) {
+        // Robot control commands
+        parsedMessage = this.parseRobotControlData(message);
+        this.log('info', '🤖 Robot control command received', { command: topic });
+        
+      } else if (topic === 'system/health') {
+        // System health data
+        parsedMessage = this.parseSystemHealthData(message);
+        this.log('debug', '💓 System health update received');
+        
+      } else {
+        // Unknown topic - try to parse as JSON, fallback to string
+        try {
+          parsedMessage = JSON.parse(message.toString());
+        } catch {
+          parsedMessage = { raw: message.toString(), type: 'unknown' };
+        }
+        this.log('debug', `📨 Unknown topic message: ${topic}`);
+      }
+
+      // Add to data buffer
+      this.dataBuffer.add(topic, parsedMessage, timestamp);
+      
+      // Broadcast to WebSocket clients
+      this.broadcastToWebSocket({
         type: 'mqtt_message',
-        topic,
-        data,
-        handler_result: handlerResult,
-        timestamp: new Date().toISOString()
-      };
-
-      this.broadcastToWebSocket(broadcastData);
-
-      // 특별한 토픽 처리
-      this.handleSpecialTopics(topic, data, handlerResult);
-
+        topic: topic,
+        data: parsedMessage,
+        timestamp: timestamp
+      });
+      
     } catch (error) {
-      this.logger.error(`❌ Error handling message from ${topic}:`, error);
-      this.stats.errorsCount++;
+      this.log('error', '❌ Error handling MQTT message:', { 
+        topic: topic, 
+        error: error.message,
+        message_preview: message.toString().substring(0, 100)
+      });
     }
   }
 
-  handleSpecialTopics(topic, data, handlerResult) {
-    // ROS2 토픽 리스트 업데이트
-    if (topic === this.config.topics.ros2_topic_list && handlerResult && handlerResult.result) {
-      this.ros2TopicCache = handlerResult.result.topics || [];
-      this.logger.info(`📋 ROS2 topic cache updated: ${this.ros2TopicCache.length} topics`);
-    }
-
-    // 에러 메시지 특별 처리
-    if (topic.startsWith('errors/')) {
-      this.handleErrorMessage(topic, data);
-    }
-
-    // 로봇 제어 명령 로깅
-    if (topic.startsWith('robot/control/')) {
-      this.logger.info(`🎮 Robot control command: ${topic}`, data);
+  /**
+   * Parse ROS2 topic list data
+   */
+  parseROS2TopicList(message) {
+    try {
+      const data = JSON.parse(message.toString());
+      return {
+        type: 'ros2_topics',
+        timestamp: data.timestamp || new Date().toISOString(),
+        topic_data: data.topic_data || data,
+        topic_count: Object.keys(data.topic_data || data).length
+      };
+    } catch {
+      return {
+        type: 'ros2_topics',
+        timestamp: new Date().toISOString(),
+        topic_data: {},
+        error: 'Failed to parse JSON',
+        raw: message.toString()
+      };
     }
   }
 
-  async startWebSocketServer() {
+  /**
+   * Parse weight sensor data
+   */
+  parseWeightSensorData(message) {
+    try {
+      const messageStr = message.toString().trim();
+      
+      // Try parsing as JSON first
+      try {
+        const data = JSON.parse(messageStr);
+        return {
+          type: 'weight_sensor',
+          weight: parseFloat(data.weight || data.value || data),
+          unit: data.unit || 'kg',
+          timestamp: data.timestamp || new Date().toISOString(),
+          raw: data
+        };
+      } catch {
+        // Try parsing as plain number
+        const weight = parseFloat(messageStr);
+        if (!isNaN(weight)) {
+          return {
+            type: 'weight_sensor',
+            weight: weight,
+            unit: 'kg',
+            timestamp: new Date().toISOString()
+          };
+        } else {
+          throw new Error('Not a valid number');
+        }
+      }
+    } catch {
+      return {
+        type: 'weight_sensor',
+        weight: 0,
+        unit: 'kg',
+        timestamp: new Date().toISOString(),
+        error: 'Failed to parse weight data',
+        raw: message.toString()
+      };
+    }
+  }
+
+  /**
+   * Parse concentration data
+   */
+  parseConcentrationData(message) {
+    try {
+      const data = JSON.parse(message.toString());
+      return {
+        type: 'concentration',
+        target: parseFloat(data.target || data.value || data),
+        unit: data.unit || '%',
+        source: data.source || 'unknown',
+        timestamp: data.timestamp || new Date().toISOString()
+      };
+    } catch {
+      return {
+        type: 'concentration',
+        target: 0,
+        unit: '%',
+        source: 'unknown',
+        timestamp: new Date().toISOString(),
+        error: 'Failed to parse concentration data',
+        raw: message.toString()
+      };
+    }
+  }
+
+  /**
+   * Parse robot control data
+   */
+  parseRobotControlData(message) {
+    try {
+      const data = JSON.parse(message.toString());
+      return {
+        type: 'robot_control',
+        command: data.command || 'unknown',
+        parameters: data.parameters || data,
+        timestamp: data.timestamp || new Date().toISOString()
+      };
+    } catch {
+      return {
+        type: 'robot_control',
+        command: 'unknown',
+        parameters: {},
+        timestamp: new Date().toISOString(),
+        error: 'Failed to parse robot control data',
+        raw: message.toString()
+      };
+    }
+  }
+
+  /**
+   * Parse system health data
+   */
+  parseSystemHealthData(message) {
+    try {
+      const data = JSON.parse(message.toString());
+      return {
+        type: 'system_health',
+        status: data.status || 'unknown',
+        metrics: data.metrics || {},
+        timestamp: data.timestamp || new Date().toISOString()
+      };
+    } catch {
+      return {
+        type: 'system_health',
+        status: 'unknown',
+        metrics: {},
+        timestamp: new Date().toISOString(),
+        error: 'Failed to parse health data',
+        raw: message.toString()
+      };
+    }
+  }
+
+  /**
+   * Setup WebSocket server for real-time communication
+   */
+  async setupWebSocketServer() {
     return new Promise((resolve, reject) => {
       try {
-        // HTTP 서버 생성
-        this.httpServer = http.createServer((req, res) => {
-          this.handleHttpRequest(req, res);
+        const wsConfig = this.config.websocket;
+        this.wss = new WebSocket.Server({ 
+          port: wsConfig.port,
+          perMessageDeflate: wsConfig.compression || false
         });
 
-        // WebSocket 서버를 HTTP 서버에 연결
-        this.wsServer = new WebSocket.Server({ 
-          server: this.httpServer,
-          perMessageDeflate: false
-        });
-
-        this.wsServer.on('connection', (ws, request) => {
+        this.wss.on('connection', (ws) => {
           this.wsClients.add(ws);
-          const clientIP = request.socket.remoteAddress;
-          
-          this.logger.info(`🔌 WebSocket client connected from ${clientIP} (total: ${this.wsClients.size})`);
+          this.log('info', `🔗 WebSocket client connected (${this.wsClients.size} total)`);
 
-          // 클라이언트 구독 관리
-          ws.subscriptions = new Set(['*']); // 기본적으로 모든 토픽 구독
+          // Send initial data
+          ws.send(JSON.stringify({
+            type: 'connection_established',
+            timestamp: new Date().toISOString(),
+            available_topics: Object.keys(this.config.mqtt.topics),
+            server_info: {
+              uptime: Date.now() - this.startTime,
+              message_count: this.messageCount,
+              buffer_stats: this.dataBuffer.getStats()
+            }
+          }));
 
           ws.on('message', (message) => {
             try {
-              const data = JSON.parse(message);
+              const data = JSON.parse(message.toString());
               this.handleWebSocketMessage(ws, data);
             } catch (error) {
-              this.logger.error('❌ WebSocket message parsing error:', error);
+              this.log('error', '❌ WebSocket message parse error:', { error: error.message });
             }
           });
 
           ws.on('close', () => {
             this.wsClients.delete(ws);
-            this.logger.info(`🔌 WebSocket client disconnected (total: ${this.wsClients.size})`);
+            this.log('info', `🔌 WebSocket client disconnected (${this.wsClients.size} remaining)`);
           });
 
           ws.on('error', (error) => {
-            this.logger.error('❌ WebSocket client error:', error);
+            this.log('error', '❌ WebSocket client error:', { error: error.message });
             this.wsClients.delete(ws);
           });
-
-          // 초기 데이터 전송
-          this.sendInitialDataToClient(ws);
         });
 
-        // HTTP 서버 시작
-        this.httpServer.listen(this.config.websocket.port, () => {
-          this.logger.info(`🌐 WebSocket + HTTP server started on port ${this.config.websocket.port}`);
+        this.wss.on('listening', () => {
+          this.log('info', `🌐 WebSocket server listening on port ${wsConfig.port}`);
           resolve();
         });
 
-        this.httpServer.on('error', (error) => {
-          this.logger.error('❌ HTTP/WebSocket server error:', error);
+        this.wss.on('error', (error) => {
+          this.log('error', '❌ WebSocket server error:', { error: error.message });
           reject(error);
         });
 
@@ -314,381 +546,273 @@ class MqttClient {
     });
   }
 
-  handleHttpRequest(req, res) {
-    // CORS 헤더 설정
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-
-    if (req.method === 'OPTIONS') {
-      res.writeHead(200);
-      res.end();
-      return;
-    }
-
-    // URL 라우팅
-    if (req.url === '/' || req.url === '/status') {
-      this.handleStatusRequest(req, res);
-    } else if (req.url === '/health') {
-      this.handleHealthRequest(req, res);
-    } else if (req.url === '/stats') {
-      this.handleStatsRequest(req, res);
-    } else if (req.url === '/favicon.ico') {
-      this.handleFaviconRequest(req, res);
-    } else {
-      res.writeHead(404, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({
-        error: 'Not Found',
-        message: 'This is a WebSocket server. Connect via ws:// protocol.',
-        websocket_url: `ws://localhost:${this.config.websocket.port}`,
-        available_endpoints: ['/', '/status', '/health', '/stats']
-      }));
-    }
-  }
-
-  handleStatusRequest(req, res) {
-    const status = {
-      service: 'Robot Web Dashboard MQTT Processor',
-      version: '1.0.0',
-      status: 'running',
-      mqtt: {
-        connected: this.isConnected,
-        host: this.config.mqtt.host,
-        port: this.config.mqtt.port
-      },
-      websocket: {
-        port: this.config.websocket.port,
-        clients: this.wsClients.size,
-        url: `ws://localhost:${this.config.websocket.port}`
-      },
-      uptime: process.uptime(),
-      memory: process.memoryUsage(),
-      timestamp: new Date().toISOString()
-    };
-
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify(status, null, 2));
-  }
-
-  handleHealthRequest(req, res) {
-    const health = {
-      status: this.isConnected ? 'healthy' : 'unhealthy',
-      checks: {
-        mqtt_connection: this.isConnected,
-        websocket_server: this.wsServer ? true : false,
-        handler_manager: this.handlerManager ? true : false,
-        uptime_seconds: process.uptime()
-      },
-      timestamp: new Date().toISOString()
-    };
-
-    const statusCode = health.status === 'healthy' ? 200 : 503;
-    res.writeHead(statusCode, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify(health, null, 2));
-  }
-
-  handleStatsRequest(req, res) {
-    const stats = this.getCurrentStatus();
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify(stats, null, 2));
-  }
-
-  handleFaviconRequest(req, res) {
-    // 간단한 favicon 응답 (빈 응답으로 처리)
-    res.writeHead(204);
-    res.end();
-  }
-
+  /**
+   * Handle WebSocket messages from clients
+   */
   handleWebSocketMessage(ws, data) {
-    switch (data.type) {
-      case 'subscribe':
-        if (data.topics && Array.isArray(data.topics)) {
-          ws.subscriptions = new Set(data.topics);
-          this.logger.debug(`📡 Client subscribed to: ${data.topics.join(', ')}`);
-        }
-        break;
-
-      case 'publish':
-        if (data.topic && data.message) {
-          this.publishMessage(data.topic, data.message);
-        }
-        break;
-
-      case 'get_status':
-        ws.send(JSON.stringify({
-          type: 'status',
-          data: this.getCurrentStatus(),
-          timestamp: new Date().toISOString()
-        }));
-        break;
-
-      case 'get_history':
-        const history = this.dataBuffer.getData(data.topic || 'all', data.count || 10);
-        ws.send(JSON.stringify({
-          type: 'history',
-          data: history,
-          timestamp: new Date().toISOString()
-        }));
-        break;
-
-      default:
-        this.logger.warn(`⚠️  Unknown WebSocket message type: ${data.type}`);
-    }
-  }
-
-  sendInitialDataToClient(ws) {
-    // 시스템 상태 전송
-    setTimeout(() => {
-      ws.send(JSON.stringify({
-        type: 'initial_data',
-        topic: 'system_status',
-        data: this.getCurrentStatus(),
-        timestamp: new Date().toISOString()
-      }));
-
-      // 최근 센서 데이터
-      const recentWeight = this.dataBuffer.getLatestData(this.config.topics.weight_sensor);
-      if (recentWeight) {
-        ws.send(JSON.stringify({
-          type: 'initial_data',
-          topic: 'weight_sensor',
-          data: recentWeight,
-          timestamp: new Date().toISOString()
-        }));
-      }
-
-      // 핸들러 통계 (핸들러 매니저가 있는 경우에만)
-      if (this.handlerManager) {
-        const handlerStats = this.handlerManager.getAllStats();
-        ws.send(JSON.stringify({
-          type: 'initial_data',
-          topic: 'handler_stats',
-          data: handlerStats,
-          timestamp: new Date().toISOString()
-        }));
-      }
-    }, 1000);
-  }
-
-  broadcastToWebSocket(data) {
-    const message = JSON.stringify(data);
-    
-    this.wsClients.forEach(ws => {
-      if (ws.readyState === WebSocket.OPEN) {
-        // 구독 필터링 (선택사항)
-        if (!ws.subscriptions || ws.subscriptions.has(data.topic) || ws.subscriptions.has('*')) {
-          ws.send(message);
-        }
-      }
-    });
-  }
-
-  publishMessage(topic, message, options = {}) {
-    if (!this.isConnected) {
-      this.logger.warn('⚠️  MQTT not connected. Cannot publish message.');
-      return false;
-    }
-
-    const payload = typeof message === 'string' ? message : JSON.stringify(message);
-    const publishOptions = {
-      qos: options.qos || 0,
-      retain: options.retain || false,
-      ...options
-    };
-    
-    this.mqttClient.publish(topic, payload, publishOptions, (error) => {
-      if (error) {
-        this.logger.error(`❌ Failed to publish to ${topic}:`, error);
-      } else {
-        this.logger.debug(`📤 Message published to ${topic}`);
-        this.stats.messagesPublished++;
-      }
-    });
-
-    return true;
-  }
-
-  startHeartbeat() {
-    setInterval(() => {
-      this.lastHeartbeat = new Date().toISOString();
-      
-      // 시스템 상태 발행
-      const systemHealth = {
-        status: 'healthy',
-        mqtt_connected: this.isConnected,
-        ws_clients: this.wsClients.size,
-        uptime: process.uptime(),
-        memory: process.memoryUsage(),
-        handlers: this.handlerManager ? this.handlerManager.getPerformanceMetrics() : null,
-        timestamp: this.lastHeartbeat
-      };
-
-      this.publishMessage(this.config.topics.system_health, systemHealth);
-
-      this.logger.debug(`💓 Heartbeat sent - MQTT: ${this.isConnected}, WS Clients: ${this.wsClients.size}`);
-      
-      // 핸들러 상태 체크 (핸들러 매니저가 있는 경우에만)
-      if (this.handlerManager) {
-        const healthCheck = this.handlerManager.healthCheck();
-        if (healthCheck.status !== 'healthy') {
-          this.logger.warn(`⚠️  Handler health issues: ${healthCheck.issues.join(', ')}`);
-        }
-      }
-    }, this.config.performance.heartbeatInterval);
-  }
-
-  setupTopicHandlers() {
-    this.logger.info('🔧 Setting up topic handlers...');
-    
-    // ROS2 토픽 리스트 업데이트 시 캐시 갱신
-    this.dataBuffer.on('data', (topic, data) => {
-      if (topic === 'ros2_topic_list' && data.handler_result) {
-        this.ros2TopicCache = data.data;
-        this.logger.info(`📋 ROS2 topic cache updated: ${this.ros2TopicCache.length} topics`);
-      }
-      
-      // 에러 메시지 특별 처리
-      if (topic.includes('error')) {
-        this.handleErrorMessage(topic, data);
-      }
-    });
-  }
-
-  handleErrorMessage(topic, data) {
-    this.logger.error(`🚨 Error message received from ${topic}:`, data);
-    
-    // 에러 메시지를 WebSocket으로 즉시 전송
-    this.broadcastToWebSocket({
-      type: 'error',
-      topic,
-      data,
-      severity: 'high',
-      timestamp: new Date().toISOString()
-    });
-    
-    // 비상정지가 필요한 심각한 에러인지 확인
-    if (this.isEmergencyError(topic, data)) {
-      this.logger.error('🚨 Emergency error detected - triggering safety response');
-      if (this.handlerManager) {
-        this.handlerManager.emergencyStop('auto_safety_system');
-      }
-    }
-  }
-
-  isEmergencyError(topic, data) {
-    // 비상정지가 필요한 에러 패턴 확인
-    const emergencyPatterns = [
-      'emergency',
-      'safety',
-      'collision',
-      'overload',
-      'temperature',
-      'power_failure'
-    ];
-    
-    const topicLower = topic.toLowerCase();
-    const dataStr = JSON.stringify(data).toLowerCase();
-    
-    return emergencyPatterns.some(pattern => 
-      topicLower.includes(pattern) || dataStr.includes(pattern)
-    );
-  }
-
-  // API 메서드들
-  getCurrentStatus() {
-    return {
-      mqtt: {
-        connected: this.isConnected,
-        host: this.config.mqtt.host,
-        port: this.config.mqtt.port,
-        client_id: this.config.mqtt.clientId
-      },
-      websocket: {
-        port: this.config.websocket.port,
-        clients: this.wsClients.size
-      },
-      handlers: this.handlerManager ? this.handlerManager.getAllStats() : null,
-      stats: this.stats,
-      uptime: process.uptime(),
-      last_heartbeat: this.lastHeartbeat,
-      timestamp: new Date().toISOString()
-    };
-  }
-
-  getHandlerStats(handlerName = null) {
-    if (!this.handlerManager) return null;
-    
-    if (handlerName) {
-      return this.handlerManager.getHandlerStats(handlerName);
-    }
-    return this.handlerManager.getAllStats();
-  }
-
-  setConcentrationTarget(target, source = 'api') {
-    if (!this.handlerManager) return false;
-    return this.handlerManager.setConcentrationTarget(target, source);
-  }
-
-  calibrateWeightSensor(offset = null) {
-    if (!this.handlerManager) return false;
-    return this.handlerManager.calibrateWeightSensor(offset);
-  }
-
-  triggerEmergencyStop(source = 'api') {
-    if (!this.handlerManager) return false;
-    return this.handlerManager.emergencyStop(source);
-  }
-
-  getDataHistory(topic, count = 10) {
-    return this.dataBuffer.getData(topic, count);
-  }
-
-  async shutdown() {
-    this.logger.info('🛑 Shutting down MQTT Processor...');
-    
     try {
-      // 종료 메시지 발행
-      if (this.isConnected) {
-        const shutdownMessage = {
-          status: 'shutting_down',
-          message: 'MQTT Processor is shutting down',
-          final_stats: {
-            uptime: process.uptime(),
-            memory: process.memoryUsage(),
-            handlers: this.handlerManager ? this.handlerManager.getPerformanceMetrics() : null
-          },
-          timestamp: new Date().toISOString()
-        };
-        
-        await this.publishMessage(this.config.topics.system_health, shutdownMessage);
-      }
-
-      // WebSocket 클라이언트들에게 종료 알림
-      this.wsClients.forEach(ws => {
-        if (ws.readyState === WebSocket.OPEN) {
+      switch (data.type) {
+        case 'connection':
+          // 클라이언트 연결 확인 메시지
           ws.send(JSON.stringify({
-            type: 'shutdown',
-            message: 'MQTT Processor is shutting down',
+            type: 'connection_acknowledged',
+            status: 'connected',
+            server_time: new Date().toISOString(),
+            available_topics: Object.keys(this.config.mqtt?.topics || {})
+          }));
+          this.log('debug', 'Connection acknowledged for client');
+          break;
+          
+        case 'get_status':
+          ws.send(JSON.stringify({
+            type: 'status',
+            data: {
+              mqtt_connected: this.isConnected,
+              uptime: Date.now() - this.startTime,
+              message_count: this.messageCount,
+              websocket_clients: this.wsClients.size,
+              buffer_stats: this.dataBuffer.getStats()
+            },
             timestamp: new Date().toISOString()
           }));
+          break;
+
+        case 'get_history':
+          const history = this.dataBuffer.get(data.topic, data.count || 10);
+          ws.send(JSON.stringify({
+            type: 'history',
+            topic: data.topic,
+            data: history,
+            timestamp: new Date().toISOString()
+          }));
+          break;
+
+        case 'publish':
+          if (this.isConnected && data.topic && data.message) {
+            const options = { qos: data.options?.qos || 0, retain: data.options?.retain || false };
+            this.client.publish(data.topic, JSON.stringify(data.message), options);
+            this.log('info', `📤 Published message to ${data.topic}`);
+            
+            // 발행 확인 응답
+            ws.send(JSON.stringify({
+              type: 'publish_ack',
+              topic: data.topic,
+              success: true,
+              timestamp: new Date().toISOString()
+            }));
+          } else {
+            ws.send(JSON.stringify({
+              type: 'publish_ack',
+              topic: data.topic,
+              success: false,
+              error: 'MQTT not connected or invalid data',
+              timestamp: new Date().toISOString()
+            }));
+          }
+          break;
+
+        case 'subscribe':
+          // 클라이언트가 특정 토픽 구독 요청
+          ws.send(JSON.stringify({
+            type: 'subscribe_ack',
+            topics: Object.keys(this.config.mqtt?.topics || {}),
+            timestamp: new Date().toISOString()
+          }));
+          break;
+
+        case 'ping':
+          // 연결 상태 확인
+          ws.send(JSON.stringify({
+            type: 'pong',
+            timestamp: new Date().toISOString()
+          }));
+          break;
+
+        case 'broadcast':
+          this.broadcastToWebSocket(data.data);
+          break;
+
+        default:
+          this.log('warn', `⚠️  Unknown WebSocket message type: ${data.type}`, { data });
+          // 알 수 없는 메시지에 대한 응답
+          ws.send(JSON.stringify({
+            type: 'error',
+            message: `Unknown message type: ${data.type}`,
+            timestamp: new Date().toISOString()
+          }));
+      }
+    } catch (error) {
+      this.log('error', '❌ Error handling WebSocket message:', { error: error.message });
+      ws.send(JSON.stringify({
+        type: 'error',
+        message: 'Message processing failed',
+        error: error.message,
+        timestamp: new Date().toISOString()
+      }));
+    }
+  }
+
+  /**
+   * Broadcast data to all connected WebSocket clients
+   */
+  broadcastToWebSocket(data) {
+    if (this.wsClients.size === 0) return;
+
+    const message = JSON.stringify(data);
+    const deadClients = new Set();
+
+    for (const client of this.wsClients) {
+      try {
+        if (client.readyState === WebSocket.OPEN) {
+          client.send(message);
+        } else {
+          deadClients.add(client);
+        }
+      } catch (error) {
+        this.log('error', '❌ WebSocket broadcast error:', { error: error.message });
+        deadClients.add(client);
+      }
+    }
+
+    // Clean up dead clients
+    for (const client of deadClients) {
+      this.wsClients.delete(client);
+    }
+  }
+
+  /**
+   * Setup data processing and cleanup
+   */
+  setupDataProcessing() {
+    // Data retention cleanup
+    const retentionHours = this.config.data_processing.retention_hours;
+    setInterval(() => {
+      const cutoffTime = Date.now() - (retentionHours * 60 * 60 * 1000);
+      
+      for (const [topic, messages] of this.dataBuffer.data.entries()) {
+        const filteredMessages = messages.filter(msg => 
+          new Date(msg.timestamp).getTime() > cutoffTime
+        );
+        this.dataBuffer.data.set(topic, filteredMessages);
+      }
+      
+      this.log('debug', '🧹 Data retention cleanup completed');
+    }, 60 * 60 * 1000); // Run every hour
+  }
+
+  /**
+   * Setup health monitoring
+   */
+  setupHealthMonitoring() {
+    const healthInterval = this.config.performance?.health_check_interval || 60000;
+    
+    setInterval(() => {
+      const memUsage = process.memoryUsage();
+      const memUsedMB = Math.round(memUsage.heapUsed / 1024 / 1024);
+      
+      const healthData = {
+        timestamp: new Date().toISOString(),
+        service: 'mqtt_processor',
+        status: this.isConnected ? 'healthy' : 'unhealthy',
+        uptime: Date.now() - this.startTime,
+        memory_mb: memUsedMB,
+        message_count: this.messageCount,
+        websocket_clients: this.wsClients.size,
+        buffer_size: this.dataBuffer.getAllTopics().length
+      };
+
+      // Log health status
+      if (this.isConnected) {
+        this.log('debug', '💓 Health check: System healthy', healthData);
+      } else {
+        this.log('warn', '⚠️  Health check: System unhealthy', healthData);
+      }
+
+      // Publish health status to MQTT
+      if (this.isConnected) {
+        this.publishMessage('system/health', healthData);
+      }
+
+      this.lastHealthCheck = Date.now();
+    }, healthInterval);
+  }
+
+  /**
+   * Publish message to MQTT broker
+   */
+  async publishMessage(topic, message, options = {}) {
+    return new Promise((resolve, reject) => {
+      if (!this.isConnected) {
+        reject(new Error('MQTT client not connected'));
+        return;
+      }
+
+      const messageStr = typeof message === 'string' ? message : JSON.stringify(message);
+      const publishOptions = {
+        qos: options.qos || 0,
+        retain: options.retain || false
+      };
+
+      this.client.publish(topic, messageStr, publishOptions, (error) => {
+        if (error) {
+          this.log('error', `❌ Failed to publish to ${topic}:`, { error: error.message });
+          reject(error);
+        } else {
+          this.log('debug', `📤 Published to ${topic}`);
+          resolve();
         }
       });
+    });
+  }
 
-      // 잠시 대기 후 연결 종료
-      await new Promise(resolve => setTimeout(resolve, 1000));
+  /**
+   * Get current status
+   */
+  getStatus() {
+    return {
+      mqtt_connected: this.isConnected,
+      websocket_server: this.wss ? 'running' : 'stopped',
+      websocket_clients: this.wsClients.size,
+      uptime: Date.now() - this.startTime,
+      message_count: this.messageCount,
+      buffer_stats: this.dataBuffer.getStats(),
+      last_health_check: this.lastHealthCheck,
+      configuration: {
+        mqtt_host: this.config.mqtt.connection.host,
+        websocket_port: this.config.websocket.port,
+        subscribed_topics: Object.keys(this.config.mqtt.topics)
+      }
+    };
+  }
 
-      // 연결 종료
-      if (this.mqttClient) {
-        this.mqttClient.end(true);
+  /**
+   * Graceful shutdown
+   */
+  async shutdown() {
+    this.log('info', '🛑 Shutting down MQTT Client...');
+    
+    try {
+      // Close WebSocket server
+      if (this.wss) {
+        this.wss.close();
+        this.log('info', '🔌 WebSocket server closed');
       }
-      
-      if (this.httpServer) {
-        this.httpServer.close();
+
+      // Disconnect MQTT client
+      if (this.client && this.isConnected) {
+        await this.publishMessage('system/health', {
+          status: 'shutting_down',
+          timestamp: new Date().toISOString(),
+          final_stats: this.getStatus()
+        });
+        
+        this.client.end(true);
+        this.log('info', '📡 MQTT client disconnected');
       }
-      
-      this.logger.info('✅ MQTT Processor shutdown complete');
+
+      this.log('info', '✅ MQTT Client shutdown complete');
     } catch (error) {
-      this.logger.error('❌ Error during shutdown:', error);
+      this.log('error', '❌ Error during shutdown:', { error: error.message });
     }
   }
 }

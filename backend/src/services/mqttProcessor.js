@@ -1,21 +1,27 @@
 /**
  * MQTT Processor 통합 서비스 - WebSocket 클라이언트 기반
  * 독립 실행 중인 MQTT 프로세서와 WebSocket으로 통신
+ * 
+ * 🔧 토픽 매핑 정밀 수정:
+ * - test: ROS2 토픽 리스트 (JSON 형식)
+ * - scale/raw: 무게센서 데이터
  */
 const WebSocket = require('ws');
 const { EventEmitter } = require('events');
 
+
 class MqttProcessorService extends EventEmitter {
-  constructor(logger) {
+  constructor(logger, broadcastCallback=null) {
     super();
     this.logger = logger;
     this.ws = null;
+    this.broadcast = broadcastCallback;
     this.isConnected = false;
     this.dataCache = new Map();
     this.reconnectAttempts = 0;
     this.maxReconnectAttempts = 5;
     this.reconnectInterval = null;
-    this.mqttProcessorUrl = 'ws://localhost:8081';
+    this.mqttProcessorUrl = 'ws://localhost:8080';
   }
 
   /**
@@ -121,7 +127,7 @@ class MqttProcessorService extends EventEmitter {
   }
 
   /**
-   * MQTT 메시지 처리
+   * MQTT 메시지 처리 - 토픽 매핑 정밀 수정
    */
   handleMqttMessage(topic, data) {
     // 데이터 캐시에 저장
@@ -129,19 +135,61 @@ class MqttProcessorService extends EventEmitter {
       data: data,
       timestamp: new Date().toISOString()
     });
-    
-    // 백엔드 이벤트 발생
+
+    // 백엔드 이벤트 발생 (범용)
     this.emit('data', { topic, data });
-    
-    // 특정 토픽별 이벤트
-    if (topic === 'ros2_topic_list') {
-      this.emit('ros2Topics', data);
-    } else if (topic === 'topic') { // 무게센서
-      this.emit('weightSensor', data);
-    } else if (topic === 'web/target_concentration') {
-      this.emit('concentration', data);
-    } else if (topic.includes('robot/control/')) {
-      this.emit('robotControl', { topic, data });
+
+    // === 🎯 정밀 수정된 센서 토픽 매핑 테이블 ===
+    const topicEventMap = {
+      // 🟢 ROS2 토픽 리스트 (모든 토픽이 JSON으로 묶여서 전송)
+      'test': 'ros2Topics',
+      
+      // 🟢 무게센서 데이터 (아두이노에서 전송)
+      'scale/raw': 'weightSensor',
+      
+      // 🟢 농도 제어 (웹에서 설정)
+      'web/target_concentration': 'concentration',
+      
+      // 🟢 로봇 제어 명령
+      'robot/control/emergency_stop': 'robotControl',
+      'robot/control/move_joint': 'robotControl',
+      'robot/control/move_linear': 'robotControl',
+      'robot/control/stop': 'robotControl',
+      'robot/control/home': 'robotControl',
+      'robot/control/speed': 'robotControl',
+      
+      // 🟢 시스템 헬스
+      'system/health': 'systemHealth',
+      
+      // 🟢 확장 가능성을 위한 추가 매핑
+      'sensor/weight': 'weightSensor',
+      'sensor/concentration': 'concentration',
+      'sensor/temperature': 'temperature'
+    };
+
+    // 매핑된 이벤트가 존재하면 emit
+    if (topicEventMap[topic]) {
+      const eventName = topicEventMap[topic];
+
+      // 로봇 제어는 topic 포함 전달
+      if (eventName === 'robotControl') {
+        this.emit(eventName, { topic, data });
+      } else {
+        this.emit(eventName, data);
+      }
+      
+      // 🎯 특별 처리: ROS2 토픽 리스트
+      if (topic === 'ros2_topic_list') {
+        this.logger.debug(`📋 ROS2 topic list received with ${Object.keys(data.topic_data || {}).length} topics`);
+      }
+      
+      // 🎯 특별 처리: 무게센서 데이터
+      if (topic === 'test') {
+        this.logger.debug(`⚖️  Weight sensor data: ${data.weight || data.value || data}kg`);
+      }
+      
+    } else {
+      this.logger.debug(`[MQTT] Unknown topic received: ${topic}`);
     }
   }
 
@@ -189,7 +237,7 @@ class MqttProcessorService extends EventEmitter {
   }
 
   /**
-   * API 메서드들
+   * API 메서드들 - 토픽명 정밀 수정
    */
 
   // 현재 상태 조회
@@ -230,11 +278,11 @@ class MqttProcessorService extends EventEmitter {
     return { target, source, sent: true };
   }
 
-  // 무게센서 캘리브레이션
+  // 🎯 무게센서 캘리브레이션 - 토픽명 수정
   calibrateWeightSensor(offset = null) {
     const success = this.sendMessage({
       type: 'publish',
-      topic: 'sensor/calibrate',
+      topic: 'scale/calibrate',  // 아두이노 캘리브레이션 토픽
       message: {
         type: 'weight_calibration',
         offset: offset,
@@ -298,14 +346,14 @@ class MqttProcessorService extends EventEmitter {
     return result;
   }
 
-  // ROS2 토픽 현황
+  // 🎯 ROS2 토픽 현황 - 토픽명 수정
   getROS2Topics() {
-    return this.getLatestData('ros2_topic_list');
+    return this.getLatestData('ros2_topic_list');  // 'test' 토픽에서 ROS2 토픽 리스트 가져옴
   }
 
-  // 무게센서 최신 데이터
+  // 🎯 무게센서 최신 데이터 - 토픽명 수정
   getWeightSensorData() {
-    return this.getLatestData('topic');
+    return this.getLatestData('test');  // 'scale/raw' 토픽에서 무게 데이터 가져옴
   }
 
   // 로봇 제어 명령 발행

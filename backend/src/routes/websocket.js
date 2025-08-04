@@ -1,88 +1,20 @@
-const WebSocket = require('ws');
+/**
+ * WebSocket 라우터
+ * - WebSocketManager를 초기화하고 router에 바인딩
+ * - 서버 진입점(server.js)에서 wsManager.initializeServer(server) 호출 필요
+ */
+
 const express = require('express');
 const router = express.Router();
+const WebSocketManager = require('../services/websocketmanager');
 
-class WebSocketManager {
-  constructor() {
-    this.clients = new Map();
-    this.server = null;
-  }
+// winston logger는 server.js에서 사용 - 여기서는 console을 기본으로 사용
+const logger = console;
 
-  initializeServer(server) {
-    this.server = new WebSocket.Server({ server });
-    
-    this.server.on('connection', (ws, req) => {
-      const clientId = this.generateClientId();
-      this.clients.set(clientId, ws);
-      
-      console.log(`Client ${clientId} connected`);
-      
-      // 클라이언트에게 연결 확인 메시지 전송
-      ws.send(JSON.stringify({
-        type: 'connection',
-        message: 'Connected to Robot Dashboard',
-        clientId: clientId,
-        timestamp: new Date().toISOString()
-      }));
-      
-      ws.on('message', (message) => {
-        try {
-          const data = JSON.parse(message);
-          this.handleMessage(clientId, data);
-        } catch (error) {
-          console.error('Error parsing message:', error);
-        }
-      });
-      
-      ws.on('close', () => {
-        this.clients.delete(clientId);
-        console.log(`Client ${clientId} disconnected`);
-      });
-    });
-  }
+// WebSocketManager 인스턴스 생성
+const wsManager = new WebSocketManager(logger);
 
-  handleMessage(clientId, data) {
-    console.log(`Message from ${clientId}:`, data);
-    
-    // 메시지 타입에 따른 처리
-    switch (data.type) {
-      case 'subscribe':
-        this.subscribeToTopic(clientId, data.topic);
-        break;
-      case 'command':
-        this.handleCommand(clientId, data);
-        break;
-      default:
-        console.log('Unknown message type:', data.type);
-    }
-  }
-
-  subscribeToTopic(clientId, topic) {
-    // 실제 ROS2 토픽 구독 로직이 들어갈 예정
-    console.log(`Client ${clientId} subscribed to ${topic}`);
-  }
-
-  handleCommand(clientId, data) {
-    // 로봇 제어 명령 처리 로직
-    console.log(`Command from ${clientId}:`, data.command);
-  }
-
-  broadcast(data) {
-    const message = JSON.stringify(data);
-    this.clients.forEach((ws, clientId) => {
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.send(message);
-      }
-    });
-  }
-
-  generateClientId() {
-    return `client_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-  }
-}
-
-const wsManager = new WebSocketManager();
-
+// router에 wsManager를 바인딩해서 외부에서 사용할 수 있도록 함
 router.wsManager = wsManager;
 
 module.exports = router;

@@ -93,7 +93,7 @@ export const MqttProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       // 토픽별 데이터 처리
       switch (message.topic) {
-        case 'topic':
+        case 'test':  // 무게 센서 토픽 변경
         case 'sensor/weight':
           if (message.data && typeof message.data.weight === 'number') {
             const weightMessage: WeightSensorMessage = {
@@ -175,7 +175,7 @@ export const MqttProvider: React.FC<{ children: React.ReactNode }> = ({ children
         
         // 기본 토픽 구독
         const defaultTopics = [
-          'topic',
+          'test',  // 무게 센서 토픽
           'web/target_concentration',
           'ros2_topic_list',
           'robot/control/+',
@@ -211,7 +211,7 @@ export const MqttProvider: React.FC<{ children: React.ReactNode }> = ({ children
       mqttClient.connect().then(() => {
         // 모든 디폴트 토픽에 대한 메시지 핸들러 등록
         mqttClient.onMessage('*', handleMessage);
-        mqttClient.onMessage('topic', handleMessage);
+        mqttClient.onMessage('test', handleMessage);  // 무게 센서 토픽
         mqttClient.onMessage('web/target_concentration', handleMessage);
         mqttClient.onMessage('ros2_topic_list', handleMessage);
         mqttClient.onMessage('robot/control/+', handleMessage);

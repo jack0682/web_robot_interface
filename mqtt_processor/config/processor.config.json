@@ -8,44 +8,44 @@
       "connectTimeout": 30000,
       "keepalive": 60,
       "clean": true,
-      "rejectUnauthorized": true
+      "rejectUnauthorized": false
     },
     "topics": {
       "ros2_topic_list": {
         "name": "ros2_topic_list",
         "qos": 1,
         "retain": true,
-        "description": "ROS2 토픽 목록"
+        "description": "ROS2 전체 토픽 목록을 JSON으로 전송하는 메시지"
       },
       "weight_sensor": {
-        "name": "topic",
+        "name": "test",
         "qos": 0,
         "retain": false,
-        "description": "아두이노 무게센서 데이터"
+        "description": "외부 무게 센서 데이터"
       },
       "target_concentration": {
         "name": "web/target_concentration",
         "qos": 1,
         "retain": true,
-        "description": "웹에서 설정하는 목표 농도"
+        "description": "사용자가 설정한 목표 농도 값"
       },
       "robot_control": {
         "name": "robot/control/+",
         "qos": 2,
         "retain": false,
-        "description": "로봇 제어 명령"
+        "description": "로봇 제어 명령 메시지 (예: MoveJ, Stop 등)"
       },
       "system_health": {
         "name": "system/health",
         "qos": 0,
         "retain": true,
-        "description": "시스템 상태 하트비트"
+        "description": "시스템 상태 및 하트비트"
       }
     },
     "security": {
       "enable_tls": true,
       "tls_version": "TLSv1.2",
-      "verify_certificate": true
+      "verify_certificate": false
     }
   },
   "websocket": {
@@ -65,8 +65,8 @@
       "decimal_places": 2
     },
     "concentration": {
-      "min_value": 0,
-      "max_value": 100,
+      "min_value": 0.0,
+      "max_value": 100.0,
       "default_target": 75.0,
       "decimal_places": 1
     },
@@ -84,6 +84,43 @@
         "x": {"min": -1000, "max": 1000},
         "y": {"min": -1000, "max": 1000},
         "z": {"min": 0, "max": 1000}
+      }
+    },
+    "ros2_topics_mapping": {
+      "expected_topics": [
+        "/clicked_point",
+        "/dsr01/alter_motion_stream",
+        "/dsr01/dsr_controller2/transition_event",
+        "/dsr01/dynamic_joint_states",
+        "/dsr01/error",
+        "/dsr01/joint_state_broadcaster/transition_event",
+        "/dsr01/joint_states",
+        "/dsr01/robot_description",
+        "/dsr01/robot_disconnection",
+        "/dsr01/servoj_rt_stream",
+        "/dsr01/servoj_stream",
+        "/dsr01/servol_rt_stream",
+        "/dsr01/servol_stream",
+        "/dsr01/speedj_rt_stream",
+        "/dsr01/speedj_stream",
+        "/dsr01/speedl_rt_stream",
+        "/dsr01/speedl_stream",
+        "/dsr01/torque_rt_stream",
+        "/initialpose",
+        "/move_base_simple/goal",
+        "/parameter_events",
+        "/rosout",
+        "/tf",
+        "/tf_static"
+      ],
+      "expected_json_structure": {
+        "timestamp": "string (ISO 8601)",
+        "topic_data": {
+          "/dsr01/joint_states": "joint position array",
+          "/dsr01/error": "error status",
+          "/clicked_point": "2D navigation goal",
+          "...": "기타 ROS2 토픽 데이터"
+        }
       }
     }
   },

@@ -1,11 +1,14 @@
 const mqtt = require('mqtt');
 const EventEmitter = require('events');
+const DataProcessor = require('./dataProcessor');
+const dataProcessor = new DataProcessor();
 
 class MqttClient extends EventEmitter {
-  constructor(options = {}) {
+  constructor(options = {},broadcast = null) {
     super();
     this.client = null;
     this.isConnected = false;
+    this.broadcast = broadcast;
     this.reconnectAttempts = 0;
     this.maxReconnectAttempts = 10;
     
@@ -20,6 +23,14 @@ class MqttClient extends EventEmitter {
     
     this.subscribedTopics = new Set();
   }
+
+  detectSensorType(topic, message) {
+    if (topic.includes('weight') || topic === 'test' || topic === 'topic') return 'weight';
+    if (topic.includes('temperature')) return 'temperature';
+    if (topic.includes('concentration')) return 'concentration';
+    return 'generic';
+  }
+
 
   connect() {
     const connectUrl = `mqtt://${this.options.host}:${this.options.port}`;
@@ -45,11 +56,26 @@ class MqttClient extends EventEmitter {
 
     this.client.on('message', (topic, payload) => {
       try {
-        const message = JSON.parse(payload.toString());
-        this.emit('message', { topic, message });
+        const rawMessage = JSON.parse(payload.toString());
+
+        // 1️⃣ 데이터 전처리
+        const sensorType = this.detectSensorType(topic, rawMessage);  // 후술
+        const processed = dataProcessor.processSensorData(sensorType, rawMessage);
+
+        // 2️⃣ WebSocket 브로드캐스트 요청
+        if (typeof this.broadcast === 'function') {
+          this.broadcast({
+            type: 'mqtt_message',
+            topic: topic,
+            data: processed
+          });
+        }
+
+        // 3️⃣ 내부 이벤트로도 전달 (선택)
+        this.emit('message', { topic, message: processed });
+
       } catch (error) {
         console.error('Error parsing MQTT message:', error);
-        this.emit('message', { topic, message: payload.toString() });
       }
     });
 

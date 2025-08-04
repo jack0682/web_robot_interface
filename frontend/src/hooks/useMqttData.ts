@@ -183,16 +183,16 @@ export const useMqttData = (autoSubscribe: string[] = []): MqttDataHookReturn =>
       });
     };
 
-    // 핸들러 등록
+    // 핸들러 등록 - 🎯 정밀 수정된 토픽명 사용
     try {
-      mqttService!.onMessage('ros2_topic_list', handleRos2Topics);
-      mqttService!.onMessage('topic', handleWeightSensor);
+      mqttService!.onMessage('test', handleWeightSensor);              // 무게센서 데이터 (변경됨)
+      mqttService!.onMessage('ros2_topic_list', handleRos2Topics);     // ROS2 토픽 리스트
       mqttService!.onMessage('web/target_concentration', handleConcentration);
       mqttService!.onMessage('robot/control/+', handleRobotControl);
       mqttService!.onMessage('error', handleError);
       mqttService!.onMessage('*', handleAllMessages);
 
-      console.log('✅ MQTT 메시지 핸들러 등록 완료');
+      console.log('✅ MQTT 메시지 핸들러 등록 완료 (정밀 수정된 토픽 사용)');
     } catch (error) {
       console.error('❌ 메시지 핸들러 등록 실패:', error);
       setError('메시지 핸들러 설정 실패');
@@ -217,54 +217,66 @@ export const useMqttData = (autoSubscribe: string[] = []): MqttDataHookReturn =>
       console.error('❌ 연결 상태 핸들러 등록 실패:', error);
     }
 
-    // 정리 함수
+    // 정리 함수 - 🎯 정밀 수정된 토픽명 사용
     return () => {
       try {
-        mqttService.offMessage('ros2_topic_list', handleRos2Topics);
-        mqttService.offMessage('topic', handleWeightSensor);
+        mqttService.offMessage('test', handleWeightSensor);              // 무게센서 데이터 (변경됨)
+        mqttService.offMessage('ros2_topic_list', handleRos2Topics);     // ROS2 토픽 리스트
         mqttService.offMessage('web/target_concentration', handleConcentration);
         mqttService.offMessage('robot/control/+', handleRobotControl);
         mqttService.offMessage('error', handleError);
         mqttService.offMessage('*', handleAllMessages);
         mqttService.offConnectionChange(handleConnection);
-        console.log('🧹 MQTT 핸들러 정리 완료');
+        console.log('🧹 MQTT 핸들러 정리 완료 (정밀 수정된 토픽 사용)');
       } catch (error) {
         console.error('❌ MQTT 핸들러 정리 실패:', error);
       }
     };
   }, [updateWithTimestamp]);
 
-  // 자동 구독 설정
+  // 자동 구독 설정 - 무한 루프 방지
   useEffect(() => {
     if (!mqttServiceRef.current || !isInitializedRef.current) return;
 
     const mqttService = mqttServiceRef.current;
     
-    // 기본 토픽들 + 사용자 지정 토픽들
+    // 기본 토픽들 + 사용자 지정 토픽들 - 🎯 정밀 수정된 토픽명 사용
     const defaultTopics = [
-      'ros2_topic_list',
-      'topic',
-      'web/target_concentration',
-      'robot/control/+',
-      'system/health',
-      'error',
+      'test',                        // 무게센서 데이터 (변경됨)
+      'ros2_topic_list',            // ROS2 토픽 리스트
+      'web/target_concentration',    // 농도 목표값
+      'robot/control/+',             // 로봇 제어 명령
+      'system/health',               // 시스템 상태
+      'error',                       // 에러 메시지
       ...autoSubscribe
     ];
 
     const uniqueTopics = [...new Set(defaultTopics)]; // 중복 제거
 
+    // 이미 구독된 토픽과 비교하여 변경된 경우만 업데이트
+    const currentSubs = new Set(subscriptions);
+    const newSubs = new Set(uniqueTopics);
+    const hasChanges = uniqueTopics.length !== subscriptions.length || 
+                      uniqueTopics.some(topic => !currentSubs.has(topic));
+    
+    if (!hasChanges) {
+      return; // 변경사항이 없으면 아무것도 하지 않음
+    }
+
     try {
       uniqueTopics.forEach(topic => {
-        mqttService.subscribe(topic);
+        if (!currentSubs.has(topic)) {
+          mqttService.subscribe(topic);
+        }
       });
       
       setSubscriptions(uniqueTopics);
-      console.log('📡 자동 구독 완료:', uniqueTopics);
+      console.log('📡 자동 구독 완료 (정밀 수정된 토픽 사용):', uniqueTopics);
     } catch (error) {
       console.error('❌ 자동 구독 실패:', error);
       setError('토픽 구독 설정 실패');
     }
-  }, [autoSubscribe]);
+  }, [subscriptions]); // autoSubscribe 의존성 제거로 무한루프 방지
 
   // WebSocket Context와 동기화
   useEffect(() => {

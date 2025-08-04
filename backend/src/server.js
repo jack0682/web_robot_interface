@@ -11,6 +11,7 @@ const rateLimit = require('express-rate-limit');
 const winston = require('winston');
 const fs = require('fs');
 const path = require('path');
+const websocketRouter = require('./routes/websocket');
 require('dotenv').config();
 
 // 서비스 및 라우터 import
@@ -19,10 +20,11 @@ const apiRouter = require('./routes/api');
 const { router: robotRouter, setMqttService: setRobotMqttService } = require('./routes/robot');
 const { router: sensorsRouter, setMqttService: setSensorsMqttService } = require('./routes/sensors');
 const { router: controlRouter, setMqttService: setControlMqttService } = require('./routes/control');
+const { router: debugRouter, setMqttService: setDebugMqttService } = require('./routes/debug');
 
 // Express 앱 생성
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5001;
 
 // 로그 디렉토리 생성
 const logDir = 'logs';
@@ -117,6 +119,7 @@ const initializeRouters = () => {
   setRobotMqttService(mqttService);
   setSensorsMqttService(mqttService);
   setControlMqttService(mqttService);
+  setDebugMqttService(mqttService);
   logger.info('🔧 MQTT service injected into all routers');
 };
 
@@ -125,6 +128,7 @@ app.use('/api', apiRouter);
 app.use('/api/robot', robotRouter);
 app.use('/api/sensors', sensorsRouter);
 app.use('/api/control', controlRouter);
+app.use('/api/debug', debugRouter);
 
 // 기본 라우트
 app.get('/', (req, res) => {
@@ -142,8 +146,9 @@ app.get('/', (req, res) => {
     ],
     endpoints: {
       robot: '/api/robot/*',
-      sensors: '/api/sensors/*',
+      sensors: '/api/sensors/*', 
       control: '/api/control/*',
+      debug: '/api/debug/*',
       health: '/health',
       websocket: 'ws://localhost:8080'
     },
@@ -233,6 +238,12 @@ app.get('/api-docs', (req, res) => {
         'POST /api/control/sequential-move': 'Execute sequential movements',
         'POST /api/control/system': 'System control commands',
         'GET /api/control/logs': 'Get control logs'
+      },
+      debug: {
+        'GET /api/debug/topic-mapping': 'Verify MQTT topic mapping status',
+        'GET /api/debug/data-flow': 'Analyze data flow between components',
+        'POST /api/debug/test-publish': 'Publish test messages to MQTT topics',
+        'GET /api/debug/system-health': 'Complete system health verification'
       }
     },
     websocket: {
@@ -252,6 +263,7 @@ app.use('*', (req, res) => {
       '/api/robot/*',
       '/api/sensors/*', 
       '/api/control/*',
+      '/api/debug/*',
       '/health',
       '/api-docs'
     ],
@@ -285,6 +297,36 @@ const setupMqttEventHandlers = () => {
   mqttService.on('connected', () => {
     logger.info('🟢 MQTT Processor connected successfully');
     mqttInitialized = true;
+    // 🎯 무게센서 데이터 브로드캐스트 (scale/raw 토픽에서)
+    mqttService.on('weightSensor', (data) => {
+      websocketRouter.wsManager.broadcast({
+        type: 'sensor_data',
+        sensor: 'weight',
+        topic: 'scale/raw',
+        data: data,
+        timestamp: new Date().toISOString()
+      });
+    });
+    
+    // 🎯 ROS2 토픽 리스트 브로드캐스트 (test 토픽에서)
+    mqttService.on('ros2Topics', (data) => {
+      websocketRouter.wsManager.broadcast({
+        type: 'ros2_topics',
+        topic: 'test',
+        data: data,
+        timestamp: new Date().toISOString()
+      });
+    });
+    
+    // 🎯 농도 데이터 브로드캐스트
+    mqttService.on('concentration', (data) => {
+      websocketRouter.wsManager.broadcast({
+        type: 'concentration',
+        topic: 'web/target_concentration',
+        data: data,
+        timestamp: new Date().toISOString()
+      });
+    });
   });
 
   mqttService.on('disconnected', () => {
@@ -305,7 +347,6 @@ const setupMqttEventHandlers = () => {
   });
 };
 
-// 서버 시작 함수
 const startServer = async () => {
   try {
     displayLogo();
@@ -329,7 +370,7 @@ const startServer = async () => {
       logger.warn('⚠️  MQTT Processor initialization failed - continuing without MQTT');
       mqttInitialized = false;
     }
-    
+
     // 라우터에 MQTT 서비스 주입
     initializeRouters();
     
@@ -338,66 +379,67 @@ const startServer = async () => {
       logger.info(`🎯 Backend API server running on port ${PORT}`);
       logger.info(`📡 Health check: http://localhost:${PORT}/health`);
       logger.info(`📚 API docs: http://localhost:${PORT}/api-docs`);
-      
+
+      // ✅ WebSocket 서버는 항상 초기화되어야 함
+      websocketRouter.wsManager.initializeServer(server);
+      logger.info('🌐 WebSocket server initialized');
+
+      // ✅ MQTT 상태에 따라 설명 로그만 다르게 출력
       if (mqttInitialized) {
         logger.info(`🔄 WebSocket available: ws://localhost:8080`);
         logger.info(`📊 MQTT topics being processed`);
+      } else {
+        logger.warn('⚠️ WebSocket active, but MQTT setup failed - only partial functionality available');
       }
-      
+
       logger.info('🎉 Robot Web Dashboard Backend ready!');
     });
+
 
     // 우아한 종료 핸들러
     const gracefulShutdown = async (signal) => {
       logger.info(`📶 Received ${signal}. Starting graceful shutdown...`);
-      
       try {
-        // HTTP 서버 종료
         server.close(async () => {
           logger.info('🛑 HTTP server closed');
-          
-          // MQTT 서비스 종료
+
           if (mqttService) {
             await mqttService.shutdown();
             logger.info('🔌 MQTT service shutdown complete');
           }
-          
+
           logger.info('✅ Graceful shutdown completed');
           process.exit(0);
         });
-        
-        // 강제 종료 타임아웃 (30초)
+
         setTimeout(() => {
           logger.error('⏰ Graceful shutdown timeout - forcing exit');
           process.exit(1);
         }, 30000);
-        
+
       } catch (error) {
         logger.error('❌ Error during shutdown:', error);
         process.exit(1);
       }
     };
 
-    // 시그널 핸들러 등록
     process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
     process.on('SIGINT', () => gracefulShutdown('SIGINT'));
-    
-    // 예외 처리
     process.on('uncaughtException', (error) => {
       logger.error('💥 Uncaught Exception:', error);
       gracefulShutdown('uncaughtException');
     });
-
     process.on('unhandledRejection', (reason, promise) => {
       logger.error('💥 Unhandled Rejection at:', promise, 'reason:', reason);
       gracefulShutdown('unhandledRejection');
     });
-    
+
   } catch (error) {
     logger.error('💥 Failed to start server:', error);
     process.exit(1);
   }
 };
+
 
 // 서버 시작
 startServer();
