@@ -11,6 +11,22 @@
       "error": "ros2/dsr01/error",
       "robot_disconnection": "ros2/dsr01/robot_disconnection"
     },
+    "scale_sensors": {
+      "raw": "scale/raw",
+      "moving_average": "scale/moving_average",
+      "exponential_average": "scale/exponential_average",
+      "kalman_simple": "scale/kalman_simple",
+      "kalman_pv": "scale/kalman_pv",
+      "ekf": "scale/ekf",
+      "ukf": "scale/ukf",
+      "all_filters": "scale/+"
+    },
+    "robot_events": {
+      "scenario_events": "test",
+      "sugar_dispensed": "robot/events/sugar_dispensed",
+      "cup_placed": "robot/events/cup_placed",
+      "pouring_analysis": "sensors/pouring/analysis"
+    },
     "sensors": {
       "weight_arduino": "topic",
       "weight_processed": "sensors/weight/processed",
@@ -37,7 +53,12 @@
       "user_commands": "web/commands",
       "settings": "web/settings",
       "user_events": "web/user_events",
-      "ui_state": "web/ui_state"
+      "ui_state": "web/ui_state",
+      "start_system": "web/commands/start",
+      "set_concentration": "web/commands/concentration",
+      "emergency_stop": "web/commands/emergency_stop",
+      "pause_system": "web/commands/pause",
+      "resume_system": "web/commands/resume"
     },
     "system": {
       "health": "system/health",
@@ -77,6 +98,9 @@
     }
   },
   "qos_levels": {
+    "scale_sensors": 0,
+    "robot_events": 1,
+    "web_commands": 1,
     "robot_control": 2,
     "emergency_stop": 2,
     "target_concentration": 1,
@@ -97,6 +121,9 @@
     "default": false
   },
   "subscription_patterns": {
+    "all_scale_sensors": "scale/+",
+    "robot_scenario_events": "test",
+    "all_web_commands": "web/commands/+",
     "all_robot": "robot/+",
     "all_sensors": "sensors/+", 
     "all_system": "system/+",
@@ -125,6 +152,17 @@
     ]
   },
   "data_types": {
+    "scale/raw": "weight_sensor_data",
+    "scale/moving_average": "weight_sensor_data",
+    "scale/exponential_average": "weight_sensor_data",
+    "scale/kalman_simple": "weight_sensor_data",
+    "scale/kalman_pv": "weight_sensor_data",
+    "scale/ekf": "weight_sensor_data",
+    "scale/ukf": "weight_sensor_data",
+    "test": "robot_event_data",
+    "web/commands/start": "web_command",
+    "web/commands/concentration": "web_command",
+    "web/commands/emergency_stop": "web_command",
     "ros2_topic_list": "array",
     "weight_sensor": "number",
     "target_concentration": "number",
@@ -132,5 +170,21 @@
     "joint_states": "object",
     "control_commands": "object",
     "system_health": "object"
+  },
+  "event_mapping": {
+    "robot_scenario_events": {
+      "1": "sugar_dispensed",
+      "2": "cup_placed"
+    },
+    "web_command_values": {
+      "start": 1,
+      "stop": 0,
+      "emergency": 999,
+      "concentration_range": {
+        "min": 0,
+        "max": 100,
+        "default": 50
+      }
+    }
   }
 }

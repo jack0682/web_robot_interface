@@ -185,7 +185,7 @@ const displayMonitoringInfo = (mqttClient, config) => {
       wsClients: mqttClient.wsClients ? mqttClient.wsClients.size : 0,
       mqttStatus: mqttClient.isConnected ? 'Connected' : 'Disconnected',
       messageCount: mqttClient.messageCount || 0,
-      bufferedTopics: mqttClient.dataBuffer ? mqttClient.dataBuffer.getAllTopics().length : 0
+      bufferedTopics: mqttClient.dataBuffer ? mqttClient.dataBuffer.size : 0
     };
 
     console.clear();
@@ -201,19 +201,19 @@ const displayMonitoringInfo = (mqttClient, config) => {
   └───────────────────────────────────────────────────────────────┘
   
   📋 Active Topics:
-  • test (무게 센서 데이터)
-  • ros2_topic_list (ROS2 토픽 목록)  
-  • web/target_concentration (웹 목표농도)
-  • robot/control/+ (로봇 제어)
+  • scale/raw, scale/moving_average, scale/exponential_average (저울 센서 7개 필터)
+  • scale/kalman_simple, scale/kalman_pv, scale/ekf, scale/ukf
+  • test (로봇 시나리오 이벤트: 설탕 투입, 컵 배치 등)
+  • web/commands/start, web/commands/concentration, web/commands/emergency_stop (웹 대시보드 명령)
   • system/health (시스템 상태)
   
-  🎯 Key Features:
-  ✅ EMQX Cloud SSL/TLS 연결
-  ✅ 실시간 WebSocket 브릿지
-  ✅ ROS2 토픽 분석 및 분류
-  ✅ 무게센서 데이터 처리
-  ✅ 웹 농도 제어 인터페이스
-  ✅ 로봇 명령 검증 및 안전성 체크
+  🎯 Integration Features:
+  ✅ 저울 센서 7개 필터 실시간 처리 (Raw, MA, EMA, Kalman, EKF, UKF)
+  ✅ 로봇 시나리오 이벤트 추적 (설탕 투입, 컵 배치)
+  ✅ 웹 대시보드 명령 발행 (시작, 농도 설정, 긴급 정지)
+  ✅ EMQX Cloud SSL/TLS 연결 with 완벽한 토픽 매칭
+  ✅ 실시간 WebSocket 브릿지 for React 프론트엔드
+  ✅ 무게 데이터 버퍼링 및 분석
   
   Press Ctrl+C to stop...
     `);
@@ -222,20 +222,6 @@ const displayMonitoringInfo = (mqttClient, config) => {
 
 // MQTT 클라이언트 이벤트 핸들러 설정
 const setupEventHandlers = (mqttClient) => {
-  // 특별한 이벤트 처리
-  if (mqttClient.dataBuffer) {
-    mqttClient.dataBuffer.on('data', (topic, data) => {
-      // 특정 토픽에 대한 실시간 로깅
-      if (topic === 'test') {
-        logger.info('📋 ROS2 topic list updated');
-      } else if (topic === 'scale/raw') {
-        logger.debug('⚖️  Weight sensor data received');
-      } else if (topic === 'web/target_concentration') {
-        logger.info('🎯 Target concentration updated from web');
-      }
-    });
-  }
-
   // 에러 처리
   process.on('uncaughtException', (error) => {
     logger.error('💥 Uncaught Exception:', error);
@@ -262,7 +248,7 @@ const gracefulShutdown = async (mqttClient, exitCode = 0) => {
         final_stats: {
           uptime: process.uptime(),
           memory: process.memoryUsage(),
-          processed_messages: mqttClient.dataBuffer ? mqttClient.dataBuffer.getAllTopics().length : 0
+          processed_messages: mqttClient.dataBuffer ? mqttClient.dataBuffer.size : 0
         }
       });
     }
