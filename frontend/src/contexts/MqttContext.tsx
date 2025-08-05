@@ -202,9 +202,17 @@ export const MqttProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       mqttClient.onError = (err: any) => {
         console.error('❌ MQTT 오류:', err);
+        
+        // Filter out non-critical WebSocket protocol errors
+        const errorMessage = err.message || '연결 실패';
+        if (errorMessage.includes('Unknown message type') && errorMessage.includes('subscribe')) {
+          console.warn('⚠️ WebSocket 프로토콜 메시지 무시됨:', errorMessage);
+          return; // Don't set error state for protocol messages
+        }
+        
         setConnectionStatus('disconnected');
         setIsConnected(false);
-        setError(`MQTT 오류: ${err.message || '연결 실패'}`);
+        setError(`MQTT 오류: ${errorMessage}`);
       };
 
       // 연결 시작

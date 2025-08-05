@@ -193,9 +193,22 @@ class MqttClient extends EventEmitter {
       });
 
       this.client.on('error', (error) => {
-        this.log('error', '❌ MQTT connection error:', { error: error.message });
+        let errorMsg = error.message || 'Unknown MQTT error';
+        
+        // Check for common authentication errors
+        if (errorMsg.includes('Not authorized') || errorMsg.includes('Connection refused')) {
+          errorMsg += ' - Check MQTT username/password credentials';
+        }
+        
+        this.log('error', '❌ MQTT connection error:', { 
+          error: errorMsg,
+          host: connection.host,
+          port: connection.port,
+          username: connection.username ? '***' : 'NOT_SET'
+        });
+        
         this.isConnected = false;
-        reject(error);
+        reject(new Error(`MQTT Connection Failed: ${errorMsg}`));
       });
 
       this.client.on('close', () => {

@@ -44,14 +44,63 @@ class WebSocketManager {
     this.logger.debug(`📩 Message from ${clientId}:`, data);
 
     switch (data.type) {
+      case 'connection':
+        this.handleConnection(clientId, data);
+        break;
+      case 'connection_ack':
+        this.handleConnectionAck(clientId, data);
+        break;
       case 'subscribe':
         this.subscribeToTopic(clientId, data.topic);
+        break;
+      case 'unsubscribe':
+        this.unsubscribeFromTopic(clientId, data.topic);
+        break;
+      case 'ping':
+        this.handlePing(clientId, data);
         break;
       case 'command':
         this.handleCommand(clientId, data);
         break;
       default:
-        this.logger.warn(`❓ Unknown message type from ${clientId}: ${data.type}`);
+        this.logger.debug(`❓ Unknown message type from ${clientId}: ${data.type}`);
+    }
+  }
+
+  handleConnection(clientId, data) {
+    this.logger.info(`🔗 Connection acknowledged from ${clientId}`);
+    
+    // Send acknowledgment back to client
+    const ws = this.clients.get(clientId);
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({
+        type: 'connection_acknowledged',
+        message: 'Connection established successfully',
+        serverTime: new Date().toISOString()
+      }));
+    }
+  }
+
+  handleConnectionAck(clientId, data) {
+    this.logger.info(`✅ Connection fully established with ${clientId}`);
+  }
+
+  handlePing(clientId, data) {
+    this.logger.debug(`🏓 Ping received from ${clientId}`);
+    const ws = this.clients.get(clientId);
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({
+        type: 'pong',
+        timestamp: new Date().toISOString(),
+        originalTimestamp: data.timestamp
+      }));
+    }
+  }
+
+  unsubscribeFromTopic(clientId, topic) {
+    if (this.subscriptions.has(clientId)) {
+      this.subscriptions.get(clientId).delete(topic);
+      this.logger.info(`📡 Client ${clientId} unsubscribed from topic: ${topic}`);
     }
   }
 

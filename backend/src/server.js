@@ -75,6 +75,9 @@ let mqttInitialized = false;
 app.use(helmet());
 app.use(compression());
 
+// Trust proxy for rate limiting
+app.set('trust proxy', 1);
+
 // CORS 설정
 app.use(cors({
   origin: process.env.FRONTEND_URL || 'http://localhost:3000',

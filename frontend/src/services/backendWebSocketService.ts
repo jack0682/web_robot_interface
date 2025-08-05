@@ -138,8 +138,23 @@ export class BackendWebSocketService {
     this.log('📨 WebSocket 메시지 수신:', data);
 
     switch (data.type) {
+      case 'connection':
+        // Backend initial connection message - acknowledge it
+        this.log('🔗 백엔드 연결 메시지 수신');
+        this.sendMessage({
+          type: 'connection_ack',
+          clientId: data.clientId,
+          timestamp: new Date().toISOString()
+        });
+        break;
+
       case 'connection_acknowledged':
         this.log('🔗 연결 확인됨');
+        break;
+
+      case 'subscribe':
+        // Backend subscription confirmation
+        this.log('📡 구독 확인:', data.topic || 'unknown topic');
         break;
 
       case 'mqtt_message':
@@ -187,12 +202,18 @@ export class BackendWebSocketService {
         break;
 
       case 'error':
-        this.log('❌ 서버 오류:', data.message);
-        this.onError?.(new Error(data.message));
+        this.log('❌ 서버 오류:', data.message || data.error || 'Unknown error');
+        this.onError?.(new Error(data.message || data.error || 'Backend WebSocket error'));
+        break;
+
+      case 'status':
+        // System status updates
+        this.log('📊 시스템 상태 업데이트:', data.data || data.status);
         break;
 
       default:
-        this.log('❓ 알 수 없는 메시지 타입:', data.type);
+        this.log('❓ 알 수 없는 메시지 타입 (무시됨):', data.type);
+        // Don't throw error for unknown message types, just log and ignore
     }
   }
 
